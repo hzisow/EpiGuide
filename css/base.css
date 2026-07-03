@@ -7,12 +7,15 @@
 [hidden] { display: none !important; }
 html, body { margin: 0; padding: 0; }
 html { height: 100%; }
-/* Lock the app to the DYNAMIC viewport. iOS Safari resolves `height:100%` to the
-   large viewport (toolbars hidden), which pushes bottom-anchored UI behind the
-   toolbar. 100dvh tracks the currently-visible area so nothing is clipped. */
+/* Lock the app to the SMALL viewport (svh) — the height with the browser
+   toolbars showing. The page itself never scrolls (screens scroll internally),
+   so Safari's toolbar never hides, and svh reserves room for it: bottom-anchored
+   UI (e.g. the checklist "Continue to Guide" button) is never covered by the
+   toolbar. Falls back to vh, then dvh, on browsers that lack svh. */
 body {
   height: 100vh;
   height: 100dvh;
+  height: 100svh;
   overflow: hidden;
   position: fixed;
   inset: 0;
@@ -46,6 +49,7 @@ h1, h2, h3, p { margin: 0; }
   max-width: 440px;
   height: 100vh;
   height: 100dvh;
+  height: 100svh;
   margin: 0 auto;
   background: var(--color-white);
   overflow: hidden;
