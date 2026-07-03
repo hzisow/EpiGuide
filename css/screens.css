@@ -6,6 +6,10 @@
   inset: 0;
   background: var(--color-gray-bg);
   overflow: hidden;
+  /* Contain the map's internal layers in their own stacking context at z-index 0
+     so an opaque map can never render above the floating cards (z-index 10+). */
+  z-index: 0;
+  isolation: isolate;
 }
 .map__canvas { position: absolute; inset: 0; }
 
