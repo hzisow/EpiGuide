@@ -7,13 +7,20 @@
 
 import { state, navigate } from '../app.js';
 import { icons } from '../icons.js';
-import { makeProjection, paintMapBackground } from '../map.js';
+import { paintMapBackground, hasLeaflet, createLeafletMap, divIcon } from '../map.js';
 
 let root, built = false;
 let stopwatchTimer = null;
 let ambulanceTimer = null;
 let etaTimer = null;
 let mapEl;
+let map = null;
+let ambMarker = null;
+let ambStart = null;
+let patientLatLng = null;
+
+const PULSE_HTML =
+  '<span class="marker__ring"></span><span class="marker__ring"></span><span class="marker__dot"></span>';
 
 export function initDispatch() {
   root = document.querySelector('.screen[data-screen="dispatch"]');
@@ -58,7 +65,7 @@ function build() {
     </div>`;
 
   mapEl = root.querySelector('#disp-map .map');
-  paintMapBackground(mapEl);
+  if (!hasLeaflet()) paintMapBackground(mapEl);
 
   root.querySelector('#disp-log').addEventListener('click', () => navigate('medicHandoff'));
 
@@ -74,28 +81,44 @@ function render() {
     epiEl.textContent = 'Epinephrine administered';
   }
 
-  // Map: patient dot (user location) + a simulated ambulance route.
+  // Map: patient dot (user location) + a simulated ambulance approaching.
   const center = state.location || { lat: 37.7793, lng: -122.4193 };
-  const rect = mapEl.getBoundingClientRect();
-  const w = rect.width || 360;
-  const h = rect.height || 200;
+  patientLatLng = [center.lat, center.lng];
+  // Ambulance starts ~700 m to the north-west and drives in.
+  ambStart = [center.lat + 0.006, center.lng - 0.006];
 
-  mapEl.querySelectorAll('.marker, .ambulance').forEach((n) => n.remove());
-
-  const patient = document.createElement('div');
-  patient.className = 'marker';
-  patient.style.left = '50%';
-  patient.style.top = '58%';
-  patient.innerHTML = `<span class="marker__ring"></span><span class="marker__ring"></span><span class="marker__dot"></span>`;
-  mapEl.appendChild(patient);
-
-  const amb = document.createElement('div');
-  amb.className = 'ambulance';
-  amb.id = 'disp-amb';
-  amb.style.left = '12%';
-  amb.style.top = '14%';
-  amb.innerHTML = `<div class="ambulance__badge">${icons.ambulance()}</div>`;
-  mapEl.appendChild(amb);
+  if (hasLeaflet()) {
+    if (!map) {
+      map = createLeafletMap(mapEl, center, { zoom: 15, interactive: false });
+      map._epiLayer = window.L.layerGroup().addTo(map);
+    }
+    map._epiLayer.clearLayers();
+    window.L.marker(patientLatLng, {
+      icon: divIcon(`<div class="marker">${PULSE_HTML}</div>`, 24),
+      zIndexOffset: 1000,
+    }).addTo(map._epiLayer);
+    ambMarker = window.L.marker(ambStart, {
+      icon: divIcon(`<div class="ambulance"><div class="ambulance__badge">${icons.ambulance()}</div></div>`, 34),
+    }).addTo(map._epiLayer);
+    map.fitBounds(window.L.latLngBounds([patientLatLng, ambStart]).pad(0.35), { animate: false });
+    setTimeout(() => map && map.invalidateSize(), 60);
+  } else {
+    // Stylized fallback.
+    mapEl.querySelectorAll('.marker, .ambulance').forEach((n) => n.remove());
+    const patient = document.createElement('div');
+    patient.className = 'marker';
+    patient.style.left = '50%';
+    patient.style.top = '58%';
+    patient.innerHTML = PULSE_HTML;
+    mapEl.appendChild(patient);
+    const amb = document.createElement('div');
+    amb.className = 'ambulance';
+    amb.id = 'disp-amb';
+    amb.style.left = '12%';
+    amb.style.top = '14%';
+    amb.innerHTML = `<div class="ambulance__badge">${icons.ambulance()}</div>`;
+    mapEl.appendChild(amb);
+  }
 }
 
 function startStopwatch() {
@@ -119,11 +142,16 @@ function startSimulations() {
   clearInterval(ambulanceTimer);
   clearInterval(etaTimer);
 
-  const amb = root.querySelector('#disp-amb');
+  const amb = root.querySelector('#disp-amb'); // stylized fallback element (if any)
   let t = 0; // 0..1 progress toward patient
   ambulanceTimer = setInterval(() => {
     t = Math.min(1, t + 0.06);
-    if (amb) {
+    if (ambMarker && patientLatLng && ambStart) {
+      // Interpolate the real map marker from its start toward the patient.
+      const lat = ambStart[0] + (patientLatLng[0] - ambStart[0]) * t;
+      const lng = ambStart[1] + (patientLatLng[1] - ambStart[1]) * t;
+      ambMarker.setLatLng([lat, lng]);
+    } else if (amb) {
       amb.style.left = `${12 + t * 38}%`;
       amb.style.top = `${14 + t * 44}%`;
     }

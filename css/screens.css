@@ -9,6 +9,24 @@
 }
 .map__canvas { position: absolute; inset: 0; }
 
+/* ---- Leaflet real-map integration ---- */
+.leaflet-container {
+  background: #EDEFF2;
+  font-family: inherit;
+  width: 100%;
+  height: 100%;
+}
+/* Reset Leaflet's default divIcon chrome so our custom markers show cleanly. */
+.epi-divicon { background: transparent; border: none; overflow: visible; }
+.epi-divicon .marker { position: relative; transform: none; }  /* rings anchor here */
+.epi-divicon .pin,
+.epi-divicon .route-you { position: static; transform: none; }
+.epi-divicon .pin svg { filter: drop-shadow(0 1px 2px rgba(0,0,0,0.25)); }
+.leaflet-control-attribution {
+  font-size: 10px;
+  background: rgba(255,255,255,0.7);
+}
+
 /* Fallback stylized map grid when no tile layer loads */
 .map__grid {
   position: absolute;

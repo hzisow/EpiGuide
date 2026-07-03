@@ -1,11 +1,14 @@
 // Screen 1 — Find. Real device geolocation, mock cabinets generated relative to
-// the user, custom map surface. Honest permission pre-prompt before the native
-// dialog.
+// the user, and a real interactive (pan/zoom) map via Leaflet. Falls back to a
+// stylized map surface if Leaflet fails to load. Honest permission pre-prompt
+// before the native dialog.
 
 import { state } from '../app.js';
 import { icons } from '../icons.js';
 import { generateMockCabinets } from '../data/cabinets.js';
-import { makeProjection, paintMapBackground } from '../map.js';
+import {
+  makeProjection, paintMapBackground, hasLeaflet, createLeafletMap, divIcon,
+} from '../map.js';
 
 // A neutral fallback location (San Francisco) so the demo still renders if the
 // user denies location or geolocation is unavailable. Clearly flagged in the UI.
@@ -13,11 +16,15 @@ const FALLBACK = { lat: 37.7793, lng: -122.4193 };
 
 let root, mapEl, topCard, bottomCard, prePrompt;
 let built = false;
+let map = null;
+let markerLayer = null;
+
+const PULSE_HTML =
+  '<span class="marker__ring"></span><span class="marker__ring"></span><span class="marker__dot"></span>';
 
 export function initFind() {
   root = document.querySelector('.screen[data-screen="find"]');
   if (!built) build();
-  // Re-render markers/cards if we already have a location (e.g. returning tab).
   if (state.location) render();
 }
 
@@ -43,7 +50,8 @@ function build() {
   bottomCard = root.querySelector('#find-bottom');
   prePrompt = root.querySelector('#find-preprompt');
 
-  paintMapBackground(mapEl);
+  // Only paint the stylized fallback grid when there's no real map library.
+  if (!hasLeaflet()) paintMapBackground(mapEl);
 
   root.querySelector('#find-allow').addEventListener('click', requestLocation);
   root.querySelector('#find-skip').addEventListener('click', () => {
@@ -87,17 +95,62 @@ function useLocation(coords, { demo }) {
 
 function render() {
   const nearest = state.cabinets[0];
+  if (hasLeaflet()) renderRealMap(nearest);
+  else renderStylizedMap(nearest);
+  renderCards(nearest);
+}
+
+// Real, interactive Leaflet map.
+function renderRealMap(nearest) {
+  if (!map) {
+    map = createLeafletMap(mapEl, state.location, { zoom: 16, interactive: true });
+    markerLayer = window.L.layerGroup().addTo(map);
+  }
+  markerLayer.clearLayers();
+
+  const L = window.L;
+  // You-are-here (blue).
+  L.marker([state.location.lat, state.location.lng], {
+    icon: divIcon('<div class="route-you__dot"></div>', 18),
+    interactive: false,
+    keyboard: false,
+  }).addTo(markerLayer);
+
+  // Other cabinets — gray pins.
+  state.cabinets.slice(1).forEach((c) => {
+    L.marker([c.lat, c.lng], {
+      icon: divIcon(`<div class="pin">${icons.mapPin()}</div>`, 26, [13, 26]),
+      title: c.label,
+    }).addTo(markerLayer);
+  });
+
+  // Nearest cabinet — pulsing red marker.
+  L.marker([nearest.lat, nearest.lng], {
+    icon: divIcon(`<div class="marker">${PULSE_HTML}</div>`, 24),
+    title: nearest.label,
+    zIndexOffset: 1000,
+  }).addTo(markerLayer);
+
+  // Frame the user + nearest cabinet nicely, then let the user pan/zoom freely.
+  const bounds = L.latLngBounds([
+    [state.location.lat, state.location.lng],
+    [nearest.lat, nearest.lng],
+  ]).pad(0.8);
+  map.fitBounds(bounds, { maxZoom: 17, animate: false });
+
+  // Container may have been sized during a transition — recompute.
+  setTimeout(() => map && map.invalidateSize(), 60);
+}
+
+// Fallback: stylized projected map (no external tiles).
+function renderStylizedMap(nearest) {
   const rect = mapEl.getBoundingClientRect();
   const w = rect.width || 390;
   const h = rect.height || 700;
-
-  // Scale so the nearest cabinet sits comfortably on screen.
   const project = makeProjection(state.location, w, h, 1.4);
 
-  // Clear old markers.
   mapEl.querySelectorAll('.marker, .pin, .me-dot').forEach((n) => n.remove());
 
-  // "You are here" dot at center.
   const me = document.createElement('div');
   me.className = 'route-you me-dot';
   me.style.left = '50%';
@@ -105,7 +158,6 @@ function render() {
   me.innerHTML = '<div class="route-you__dot"></div>';
   mapEl.appendChild(me);
 
-  // Additional cabinets as static gray pins (skip nearest).
   state.cabinets.slice(1).forEach((c) => {
     const p = project(c);
     const pin = document.createElement('div');
@@ -116,16 +168,16 @@ function render() {
     mapEl.appendChild(pin);
   });
 
-  // Nearest cabinet as pulsing red marker.
   const np = project(nearest);
   const marker = document.createElement('div');
   marker.className = 'marker';
   marker.style.left = `${clamp(np.x, w)}px`;
   marker.style.top = `${clamp(np.y, h)}px`;
-  marker.innerHTML = `<span class="marker__ring"></span><span class="marker__ring"></span><span class="marker__dot"></span>`;
+  marker.innerHTML = PULSE_HTML;
   mapEl.appendChild(marker);
+}
 
-  // Top card.
+function renderCards(nearest) {
   topCard.innerHTML = `
     <div class="card card--elevated">
       <span class="eyebrow">Nearest epinephrine</span>
@@ -134,7 +186,6 @@ function render() {
       ${state.locationIsDemo ? `<div class="status-note">${icons.crosshair()}<span>Demo location — allow location for real distances</span></div>` : ''}
     </div>`;
 
-  // Bottom card.
   const maps = `https://maps.apple.com/?daddr=${nearest.lat},${nearest.lng}`;
   bottomCard.innerHTML = `
     <div class="card card--elevated">
@@ -151,7 +202,6 @@ function render() {
     </div>`;
 }
 
-// Keep markers within the visible map bounds with a little padding.
 function clamp(v, max) {
   const pad = 40;
   return Math.max(pad, Math.min(max - pad, v));

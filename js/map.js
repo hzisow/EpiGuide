@@ -48,3 +48,52 @@ export function paintMapBackground(container) {
     container.appendChild(el);
   });
 }
+
+// ---------------------------------------------------------------------------
+// Real interactive map (Leaflet, vendored). Falls back to the stylized map
+// above when Leaflet isn't available (e.g. it failed to load).
+// ---------------------------------------------------------------------------
+
+export function hasLeaflet() {
+  return typeof window !== 'undefined' && !!window.L;
+}
+
+// Clean light-gray basemap (CARTO Positron) — matches the app's minimal look.
+// Tiles load from CARTO's public CDN; free, no API key. Requires network (as any
+// real map does); markers still render if tiles are slow.
+const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+const TILE_ATTR = '&copy; OpenStreetMap &copy; CARTO';
+
+export function createLeafletMap(container, center, { zoom = 16, interactive = true } = {}) {
+  if (!hasLeaflet()) return null;
+  const map = window.L.map(container, {
+    center: [center.lat, center.lng],
+    zoom,
+    zoomControl: false,             // mobile uses pinch-to-zoom
+    attributionControl: true,
+    dragging: interactive,
+    scrollWheelZoom: interactive,
+    doubleClickZoom: interactive,
+    boxZoom: interactive,
+    keyboard: interactive,
+    touchZoom: interactive,
+    tap: interactive,
+  });
+  window.L.tileLayer(TILE_URL, {
+    maxZoom: 20,
+    subdomains: 'abcd',
+    detectRetina: true,
+    attribution: TILE_ATTR,
+  }).addTo(map);
+  return map;
+}
+
+// Build a Leaflet divIcon from raw HTML (used for our custom pulsing/pin markers).
+export function divIcon(html, size = 24, anchor) {
+  return window.L.divIcon({
+    html,
+    className: 'epi-divicon',
+    iconSize: [size, size],
+    iconAnchor: anchor || [size / 2, size / 2],
+  });
+}
