@@ -12,6 +12,21 @@ human being.
 This is a real, working app (not mockups), built to run on an iPhone for live
 demos.
 
+## Live site
+
+Once GitHub Pages is enabled (one-time), the app is served with HTTPS at:
+
+**https://hzisow.github.io/EpiGuide/**
+
+HTTPS matters — camera (Recognize) and geolocation (Find) require a secure
+context, so the Pages URL works on iPhone where a plain LAN `http://` address
+would not.
+
+**One-time enable:** repo **Settings → Pages → Build and deployment → Source →
+"Deploy from a branch" → branch `claude/file-read-create-p72rrc`, folder `/ (root)`
+→ Save.** The site publishes in ~1 minute and re-publishes automatically on every
+push (no build step — the static files are served directly).
+
 ## Stack
 
 Plain HTML/CSS/JS, ES modules, **no framework and no build step**. Just serve the
