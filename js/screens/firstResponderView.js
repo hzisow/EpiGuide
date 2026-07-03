@@ -3,7 +3,7 @@
 
 import { state, navigate } from '../app.js';
 import { icons } from '../icons.js';
-import { paintMapBackground, hasLeaflet, createLeafletMap, divIcon } from '../map.js';
+import { paintMapBackground, mountMap } from '../map.js';
 
 let root, built = false;
 
@@ -36,47 +36,28 @@ function build() {
 
   const mapEl = root.querySelector('#fr-map');
   const center = state.location || { lat: 37.7793, lng: -122.4193 };
-  const patientLL = [center.lat, center.lng];
-  const youLL = [center.lat - 0.0035, center.lng - 0.0032]; // ~450 m away
+  paintMapBackground(mapEl); // backdrop until the map loads
 
-  if (hasLeaflet()) {
-    root.querySelector('#fr-route').remove(); // route drawn as a Leaflet polyline
-    const map = createLeafletMap(mapEl, center, { zoom: 15, interactive: false });
-    window.L.polyline([youLL, patientLL], {
-      color: '#E03131', weight: 4, opacity: 0.9, dashArray: '2 10', lineCap: 'round',
-    }).addTo(map);
-    window.L.marker(youLL, {
-      icon: divIcon('<div class="route-you__dot"></div>', 18),
-    }).addTo(map);
-    window.L.marker(patientLL, {
-      icon: divIcon(`<div class="marker"><span class="marker__ring"></span><span class="marker__dot"></span></div>`, 24),
-      zIndexOffset: 1000,
-    }).addTo(map);
-    map.fitBounds(window.L.latLngBounds([youLL, patientLL]).pad(0.4), { animate: false });
-    setTimeout(() => map.invalidateSize(), 60);
-  } else {
-    paintMapBackground(mapEl);
-    const you = document.createElement('div');
-    you.className = 'route-you';
-    you.style.left = '22%';
-    you.style.top = '72%';
-    you.innerHTML = '<div class="route-you__dot"></div>';
-    mapEl.appendChild(you);
-    const patient = document.createElement('div');
-    patient.className = 'marker';
-    patient.style.left = '74%';
-    patient.style.top = '28%';
-    patient.innerHTML = `<span class="marker__ring"></span><span class="marker__dot"></span>`;
-    mapEl.appendChild(patient);
-    requestAnimationFrame(() => {
-      const svg = root.querySelector('#fr-route');
-      const r = mapEl.getBoundingClientRect();
-      const x1 = r.width * 0.22, y1 = r.height * 0.72;
-      const x2 = r.width * 0.74, y2 = r.height * 0.28;
-      svg.innerHTML = `<path d="M${x1} ${y1} C ${x1 + 40} ${y1 - 80}, ${x2 - 60} ${y2 + 90}, ${x2} ${y2}"
-        fill="none" stroke="#E03131" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 10" opacity="0.9"/>`;
-    });
-  }
+  // Real map, pinned at the patient. "You" + route are simulated overlays.
+  mountMap(mapEl, center.lat, center.lng, { zoom: 16, interactive: false });
+
+  const you = document.createElement('div');
+  you.className = 'route-you';
+  you.style.left = '24%';
+  you.style.top = '74%';
+  you.style.zIndex = '2';
+  you.innerHTML = '<div class="route-you__dot"></div>';
+  mapEl.appendChild(you);
+
+  const svg = root.querySelector('#fr-route');
+  svg.style.zIndex = '2';
+  requestAnimationFrame(() => {
+    const r = mapEl.getBoundingClientRect();
+    const x1 = r.width * 0.24, y1 = r.height * 0.74;
+    const x2 = r.width * 0.50, y2 = r.height * 0.48; // patient pin sits at centre
+    svg.innerHTML = `<path d="M${x1} ${y1} C ${x1 + 40} ${y1 - 80}, ${x2 - 40} ${y2 + 70}, ${x2} ${y2}"
+      fill="none" stroke="#E03131" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 10" opacity="0.9"/>`;
+  });
 
   root.querySelector('#fr-cant').addEventListener('click', () => navigate('responderAlert'));
   root.querySelector('#fr-nav').addEventListener('click', () => navigate('medicHandoff'));

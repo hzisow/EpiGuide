@@ -4,7 +4,7 @@
 
 import { state } from '../app.js';
 import { icons } from '../icons.js';
-import { paintMapBackground, hasLeaflet, createLeafletMap, divIcon } from '../map.js';
+import { paintMapBackground, mountMap } from '../map.js';
 
 let root, built = false;
 
@@ -51,21 +51,9 @@ function build() {
 
   const mapEl = root.querySelector('#mh-map');
   const center = state.location || { lat: 37.7793, lng: -122.4193 };
-  if (hasLeaflet()) {
-    const map = createLeafletMap(mapEl, center, { zoom: 16, interactive: false });
-    window.L.marker([center.lat, center.lng], {
-      icon: divIcon(`<div class="marker"><span class="marker__dot"></span></div>`, 24),
-    }).addTo(map);
-    setTimeout(() => map.invalidateSize(), 60);
-  } else {
-    paintMapBackground(mapEl);
-    const patient = document.createElement('div');
-    patient.className = 'marker';
-    patient.style.left = '50%';
-    patient.style.top = '52%';
-    patient.innerHTML = `<span class="marker__dot"></span>`;
-    mapEl.appendChild(patient);
-  }
+  paintMapBackground(mapEl); // backdrop until the map loads
+  // Static real-map thumbnail pinned at the patient location.
+  mountMap(mapEl, center.lat, center.lng, { zoom: 16, interactive: false });
 
   root.querySelector('#mh-share').addEventListener('click', () => {
     const btn = root.querySelector('#mh-share');

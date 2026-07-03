@@ -3,7 +3,7 @@
 // navigations, cache-first for static app assets. MediaPipe/fonts CDNs are left
 // to the network (they degrade gracefully in the app).
 
-const CACHE = 'epiguide-v3';
+const CACHE = 'epiguide-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -30,11 +30,6 @@ const ASSETS = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/favicon-32.png',
-  './vendor/leaflet/leaflet.js',
-  './vendor/leaflet/leaflet.css',
-  './vendor/leaflet/images/marker-icon.png',
-  './vendor/leaflet/images/marker-icon-2x.png',
-  './vendor/leaflet/images/marker-shadow.png',
 ];
 
 self.addEventListener('install', (e) => {

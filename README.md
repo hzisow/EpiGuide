@@ -42,7 +42,7 @@ epiguide-app/
 │   ├── app.js            # global state + screen router
 │   ├── icons.js          # line-icon set
 │   ├── illustrations.js  # flat pictogram Guide art
-│   ├── map.js            # self-contained map surface
+│   ├── map.js            # real Google Maps embed (+ stylized fallback)
 │   ├── screens/          # one module per screen
 │   └── data/             # cabinets, guide steps, checklist items
 └── icons/                # PWA / apple-touch icons

@@ -50,50 +50,30 @@ export function paintMapBackground(container) {
 }
 
 // ---------------------------------------------------------------------------
-// Real interactive map (Leaflet, vendored). Falls back to the stylized map
-// above when Leaflet isn't available (e.g. it failed to load).
+// Real map — Google Maps embed (an actual interactive Google map in an iframe).
+// Keyless: uses the public `output=embed` endpoint, so no API key or paid
+// developer account is required. Interactive (pan/zoom) and drops a pin at the
+// given coordinates. Requires network, like any real map.
 // ---------------------------------------------------------------------------
 
-export function hasLeaflet() {
-  return typeof window !== 'undefined' && !!window.L;
+export function googleMapsEmbedUrl(lat, lng, zoom = 16) {
+  return `https://maps.google.com/maps?q=${lat},${lng}&z=${zoom}&hl=en&output=embed`;
 }
 
-// Clean light-gray basemap (CARTO Positron) — matches the app's minimal look.
-// Tiles load from CARTO's public CDN; free, no API key. Requires network (as any
-// real map does); markers still render if tiles are slow.
-const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-const TILE_ATTR = '&copy; OpenStreetMap &copy; CARTO';
-
-export function createLeafletMap(container, center, { zoom = 16, interactive = true } = {}) {
-  if (!hasLeaflet()) return null;
-  const map = window.L.map(container, {
-    center: [center.lat, center.lng],
-    zoom,
-    zoomControl: false,             // mobile uses pinch-to-zoom
-    attributionControl: true,
-    dragging: interactive,
-    scrollWheelZoom: interactive,
-    doubleClickZoom: interactive,
-    boxZoom: interactive,
-    keyboard: interactive,
-    touchZoom: interactive,
-    tap: interactive,
-  });
-  window.L.tileLayer(TILE_URL, {
-    maxZoom: 20,
-    subdomains: 'abcd',
-    detectRetina: true,
-    attribution: TILE_ATTR,
-  }).addTo(map);
-  return map;
-}
-
-// Build a Leaflet divIcon from raw HTML (used for our custom pulsing/pin markers).
-export function divIcon(html, size = 24, anchor) {
-  return window.L.divIcon({
-    html,
-    className: 'epi-divicon',
-    iconSize: [size, size],
-    iconAnchor: anchor || [size / 2, size / 2],
-  });
+// Mount (or update) a Google Maps iframe inside `container`. Returns the iframe.
+// interactive:false disables panning (for static thumbnails / status views).
+export function mountMap(container, lat, lng, { zoom = 16, interactive = true } = {}) {
+  let iframe = container.querySelector('iframe.epi-gmap');
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.className = 'epi-gmap';
+    iframe.loading = 'lazy';
+    iframe.referrerPolicy = 'no-referrer-when-downgrade';
+    iframe.setAttribute('allowfullscreen', '');
+    iframe.title = 'Map';
+    container.appendChild(iframe);
+  }
+  iframe.src = googleMapsEmbedUrl(lat, lng, zoom);
+  iframe.style.pointerEvents = interactive ? 'auto' : 'none';
+  return iframe;
 }
