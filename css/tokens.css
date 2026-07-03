@@ -31,8 +31,10 @@
   --shadow-card: 0 2px 8px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
   --shadow-elevated: 0 8px 24px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.06);
 
-  /* Type */
-  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  /* Type — Apple's system font stack (San Francisco on iOS/macOS). Built into
+     the OS, so nothing to download and no web-font network dependency. */
+  --font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display',
+                 'Helvetica Neue', Helvetica, Arial, sans-serif;
 
   /* Motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);

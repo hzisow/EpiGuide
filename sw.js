@@ -3,7 +3,7 @@
 // navigations, cache-first for static app assets. MediaPipe/fonts CDNs are left
 // to the network (they degrade gracefully in the app).
 
-const CACHE = 'epiguide-v1';
+const CACHE = 'epiguide-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -29,6 +29,7 @@ const ASSETS = [
   './js/screens/medicHandoff.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './icons/favicon-32.png',
 ];
 
 self.addEventListener('install', (e) => {

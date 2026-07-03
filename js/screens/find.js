@@ -56,6 +56,7 @@ function build() {
     render();
   } else {
     prePrompt.hidden = false;
+    document.getElementById('app').classList.add('epi-modal');
   }
 }
 
@@ -80,6 +81,7 @@ function useLocation(coords, { demo }) {
   state.locationIsDemo = demo;
   state.cabinets = generateMockCabinets(coords.lat, coords.lng);
   prePrompt.hidden = true;
+  document.getElementById('app').classList.remove('epi-modal');
   render();
 }
 

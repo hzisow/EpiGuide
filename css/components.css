@@ -219,6 +219,10 @@
   padding-bottom: max(var(--space-2), env(safe-area-inset-bottom));
 }
 .tabbar--visible { display: flex; }
+/* Hide the tab bar while a full-screen permission modal is open — the tab bar
+   sits above screen content in the stacking order and would otherwise clip the
+   modal's lower buttons. */
+#app.epi-modal .tabbar { display: none !important; }
 .tab {
   flex: 1;
   display: flex;

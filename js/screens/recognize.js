@@ -36,6 +36,7 @@ export function initRecognize() {
 
 export function teardownRecognize() {
   stopCamera();
+  document.getElementById('app').classList.remove('epi-modal');
 }
 
 function build() {
@@ -88,6 +89,7 @@ function build() {
 function showPermPrompt() {
   permEl.hidden = false;
   badgesEl.innerHTML = '';
+  document.getElementById('app').classList.add('epi-modal');
 }
 
 async function startCamera() {
@@ -112,6 +114,7 @@ async function startCamera() {
   video.srcObject = stream;
   await video.play().catch(() => {});
   permEl.hidden = true;
+  document.getElementById('app').classList.remove('epi-modal');
   sizeCanvas();
   window.addEventListener('resize', sizeCanvas);
 
