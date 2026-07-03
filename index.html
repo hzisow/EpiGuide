@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+  <title>EpiGuide</title>
+  <meta name="description" content="Anaphylaxis bystander-response guide — find epinephrine, recognize symptoms, administer it, and get EMS there fast." />
+
+  <!-- PWA / Add to Home Screen -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#E03131" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="EpiGuide" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="icon" type="image/png" href="icons/icon-192.png" />
+
+  <!-- Fonts (progressive enhancement; falls back to system fonts offline) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Design system -->
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/screens.css" />
+</head>
+<body>
+  <main id="app">
+    <section class="screen" data-screen="find" aria-label="Find nearest epinephrine"></section>
+    <section class="screen" data-screen="recognize" aria-label="Recognize symptoms"></section>
+    <section class="screen" data-screen="guide" aria-label="Administration guide"></section>
+    <section class="screen" data-screen="dispatch" aria-label="Emergency dispatch"></section>
+    <section class="screen" data-screen="checklist" aria-label="Manual symptom checklist"></section>
+    <section class="screen" data-screen="responderAlert" aria-label="Responder alert"></section>
+    <section class="screen" data-screen="firstResponderView" aria-label="First responder view"></section>
+    <section class="screen" data-screen="medicHandoff" aria-label="Medic handoff"></section>
+
+    <nav class="tabbar" id="tabbar" aria-label="Primary"></nav>
+  </main>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

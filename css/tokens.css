@@ -1,0 +1,46 @@
+:root {
+  /* Colors */
+  --color-red: #E03131;
+  --color-red-dark: #C92A2A;     /* hover/active state, and small red text on white for AA contrast */
+  --color-white: #FFFFFF;
+  --color-ink: #1A1A1A;
+  --color-gray-text: #6B7280;
+  --color-gray-divider: #E9ECEF;
+  --color-gray-bg: #F8F9FA;
+  --color-blue: #1C7ED6;          /* Responder network — PLACEHOLDER, swap for real brand hex if found */
+  --color-green: #2F9E44;         /* Clinician/EMS — PLACEHOLDER, swap for real brand hex if found */
+
+  /* Spacing scale (4px base unit) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Radius scale */
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --radius-pill: 999px;
+
+  /* Elevation */
+  --shadow-card: 0 2px 8px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-elevated: 0 8px 24px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.06);
+
+  /* Type */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 400ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --duration-fast: 0ms; --duration-base: 0ms; --duration-slow: 0ms; }
+}

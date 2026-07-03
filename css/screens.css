@@ -1,0 +1,514 @@
+/* ============================================================
+   Shared map surface (Find + Dispatch)
+   ============================================================ */
+.map {
+  position: absolute;
+  inset: 0;
+  background: var(--color-gray-bg);
+  overflow: hidden;
+}
+.map__canvas { position: absolute; inset: 0; }
+
+/* Fallback stylized map grid when no tile layer loads */
+.map__grid {
+  position: absolute;
+  inset: -20%;
+  background-image:
+    linear-gradient(var(--color-gray-divider) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-gray-divider) 1px, transparent 1px);
+  background-size: 48px 48px;
+  opacity: 0.7;
+}
+.map__road {
+  position: absolute;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--color-gray-divider);
+}
+
+/* Pulsing marker (nearest cabinet / patient) */
+.marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+}
+.marker__dot {
+  position: relative;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-red);
+  border: 3px solid #fff;
+  box-shadow: var(--shadow-card);
+}
+.marker__ring {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--color-red);
+  transform: translate(-50%, -50%);
+  animation: pulse-ring 2s var(--ease-out) infinite;
+}
+.marker__ring:nth-child(2) { animation-delay: 0.6s; }
+@keyframes pulse-ring {
+  0%   { opacity: 0.5; transform: translate(-50%,-50%) scale(1); }
+  100% { opacity: 0;   transform: translate(-50%,-50%) scale(5); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .marker__ring { animation: none; opacity: 0.25; transform: translate(-50%,-50%) scale(3); }
+}
+
+.pin {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  z-index: 4;
+  color: var(--color-gray-text);
+}
+.pin svg { width: 26px; height: 26px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2)); }
+
+.ambulance {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  transition: top 1s linear, left 1s linear;
+}
+.ambulance__badge {
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  background: var(--color-green);
+  color: #fff;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow: var(--shadow-card);
+}
+.ambulance__badge svg { width: 18px; height: 18px; }
+
+/* ============================================================
+   Screen 1 — Find
+   ============================================================ */
+.find { position: relative; }
+.find__top {
+  position: absolute;
+  top: max(var(--space-4), env(safe-area-inset-top));
+  left: var(--space-4);
+  right: var(--space-4);
+  z-index: 10;
+}
+.find__bottom {
+  position: absolute;
+  left: var(--space-4);
+  right: var(--space-4);
+  bottom: calc(72px + max(var(--space-4), env(safe-area-inset-bottom)));
+  z-index: 10;
+}
+.find__route {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.find__route-icon {
+  flex: 0 0 auto;
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  border-radius: var(--radius-md);
+  background: rgba(224,49,49,0.1);
+  color: var(--color-red-dark);
+}
+.pre-prompt {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  background: rgba(26,26,26,0.55);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  padding: var(--space-4);
+  padding-bottom: max(var(--space-6), env(safe-area-inset-bottom));
+}
+.pre-prompt__card {
+  background: #fff;
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-elevated);
+}
+.pre-prompt__icon {
+  width: 56px; height: 56px;
+  display: grid; place-items: center;
+  border-radius: var(--radius-md);
+  background: rgba(224,49,49,0.1);
+  color: var(--color-red-dark);
+  margin-bottom: var(--space-4);
+}
+.pre-prompt__card .btn { margin-top: var(--space-5); }
+
+.status-note {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin-top: var(--space-3);
+  color: var(--color-gray-text);
+  font-size: 13px;
+}
+
+/* ============================================================
+   Screen 2 — Recognize
+   ============================================================ */
+.recognize { position: relative; background: #000; }
+.recognize__video, .recognize__overlay {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+}
+.recognize__video { object-fit: cover; }
+.recognize__overlay { z-index: 2; pointer-events: none; }
+
+.recognize__toolbar {
+  position: absolute;
+  top: max(var(--space-4), env(safe-area-inset-top));
+  left: 0; right: 0;
+  z-index: 6;
+  display: flex;
+  justify-content: center;
+}
+.recognize__badges {
+  position: absolute;
+  top: 40%;
+  left: 0; right: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+.recognize__sheet {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  z-index: 7;
+  background: rgba(20,20,22,0.72);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  padding: var(--space-6);
+  /* Clear the bottom tab bar so the ghost "use checklist" link stays tappable. */
+  padding-bottom: calc(76px + max(var(--space-4), env(safe-area-inset-bottom)));
+  color: #fff;
+}
+.recognize__sheet .btn--ghost { color: #ff8787; display: block; margin: var(--space-4) auto 0; }
+.recognize__result-head { font-weight: 700; font-size: 22px; line-height: 1.2; }
+.recognize__result-sub { color: rgba(255,255,255,0.72); font-size: 14px; margin-top: 6px; margin-bottom: var(--space-5); }
+
+.recognize__scanline {
+  position: absolute;
+  left: 0; right: 0;
+  color: rgba(255,255,255,0.85);
+  font-size: 13px;
+  text-align: center;
+}
+
+.perm-dark {
+  position: absolute; inset: 0; z-index: 8;
+  display: flex; flex-direction: column; justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-8);
+  background: #0d0d0f;
+  color: #fff;
+  text-align: center;
+}
+.perm-dark .pre-prompt__icon { margin: 0 auto var(--space-2); background: rgba(255,255,255,0.08); color: #fff; }
+
+/* ============================================================
+   Screen 3 — Guide
+   ============================================================ */
+.guide {
+  background: var(--color-white);
+  padding: max(var(--space-4), env(safe-area-inset-top)) var(--space-5) 0;
+}
+.guide__head { padding-top: var(--space-2); }
+.guide__eyebrow { display: flex; align-items: center; justify-content: space-between; }
+.guide__progress { margin-top: var(--space-3); }
+.guide__stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-4) 0;
+  min-height: 0;
+}
+.guide__art {
+  width: 100%;
+  max-width: 300px;
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+  margin-bottom: var(--space-6);
+}
+.guide__art svg { width: 100%; height: 100%; }
+.guide__headline { margin-bottom: var(--space-2); }
+.guide__stage-inner {
+  display: flex; flex-direction: column; align-items: center;
+  animation: guide-step-in var(--duration-base) var(--ease-out);
+}
+@keyframes guide-step-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guide__stage-inner { animation: guide-fade var(--duration-base) linear; }
+  @keyframes guide-fade { from { opacity: 0; } to { opacity: 1; } }
+}
+.guide__foot {
+  padding: var(--space-4) 0 max(var(--space-5), env(safe-area-inset-bottom));
+}
+
+/* Countdown ring (step 5) */
+.countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+.countdown__ring { position: relative; width: 120px; height: 120px; }
+.countdown__ring svg { width: 120px; height: 120px; transform: rotate(-90deg); }
+.countdown__track { fill: none; stroke: var(--color-gray-divider); stroke-width: 8; }
+.countdown__progress {
+  fill: none;
+  stroke: var(--color-red);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s linear;
+}
+.countdown__num {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  font-weight: 700; font-size: 44px; color: var(--color-ink);
+}
+
+/* ============================================================
+   Screen 4 — Dispatch
+   ============================================================ */
+.dispatch { background: var(--color-gray-bg); }
+.dispatch__banner {
+  margin: max(var(--space-4), env(safe-area-inset-top)) var(--space-4) var(--space-4);
+  background: var(--color-red);
+  color: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.dispatch__banner .check-circle {
+  flex: 0 0 auto;
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  background: rgba(255,255,255,0.2);
+  border-radius: 50%;
+}
+.dispatch__map {
+  position: relative;
+  height: 200px;
+  margin: 0 var(--space-4);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+.dispatch__map .badge-glass {
+  position: absolute; top: var(--space-3); right: var(--space-3); z-index: 6;
+}
+.dispatch__body { padding: var(--space-4); }
+.reported-row {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-gray-divider);
+}
+.reported-row:last-child { border-bottom: none; }
+.reported-row .icon { color: var(--color-green); width: 22px; height: 22px; flex: 0 0 auto; }
+.stopwatch {
+  text-align: center;
+  padding: var(--space-5) 0 var(--space-2);
+}
+.stopwatch__num {
+  font-weight: 700;
+  font-size: 52px;
+  line-height: 1;
+  color: var(--color-red);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/* ============================================================
+   Screen 5 — Checklist
+   ============================================================ */
+.checklist { background: var(--color-white); }
+.checklist__head { padding: max(var(--space-6), env(safe-area-inset-top)) var(--space-5) var(--space-4); }
+.checklist__body { padding: 0 var(--space-5) 200px; }
+.checklist__group { margin-top: var(--space-5); }
+.checklist__group-label { margin-bottom: var(--space-1); }
+.checklist__group .check-row { border-bottom: 1px solid var(--color-gray-divider); }
+.checklist__group .check-row:last-child { border-bottom: none; }
+
+.checklist__result {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  z-index: 10;
+  padding: var(--space-4);
+  padding-bottom: max(var(--space-5), env(safe-area-inset-bottom));
+  background: linear-gradient(to top, var(--color-white) 70%, rgba(255,255,255,0));
+}
+.result-card {
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  transition: background-color var(--duration-base) var(--ease-out);
+}
+.result-card--urgent {
+  background: var(--color-red);
+  color: #fff;
+  box-shadow: var(--shadow-elevated);
+}
+.result-card--urgent .btn { margin-top: var(--space-4); }
+.result-card--calm {
+  background: var(--color-gray-bg);
+  color: var(--color-gray-text);
+  border: 1px solid var(--color-gray-divider);
+}
+.result-card__head { display: flex; align-items: center; gap: var(--space-3); }
+.result-card__head .icon { flex: 0 0 auto; }
+.result-card__title { font-weight: 700; font-size: 18px; }
+.result-card--calm .result-card__title { color: var(--color-ink); font-weight: 600; }
+.result-card__sub { font-size: 14px; margin-top: 4px; opacity: 0.92; }
+
+/* ============================================================
+   Screen 6 — Responder Alert
+   ============================================================ */
+.responder {
+  background: var(--color-white);
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-6);
+}
+.responder__inner { width: 100%; max-width: 360px; margin: auto; }
+.alert-bell {
+  position: relative;
+  width: 120px; height: 120px;
+  margin: 0 auto var(--space-6);
+}
+.alert-bell__core {
+  position: absolute; inset: 0;
+  margin: auto;
+  width: 88px; height: 88px;
+  border-radius: 50%;
+  background: var(--color-red);
+  color: #fff;
+  display: grid; place-items: center;
+  z-index: 2;
+  box-shadow: var(--shadow-card);
+}
+.alert-bell__core svg { width: 40px; height: 40px; }
+.alert-bell__ring {
+  position: absolute; top: 50%; left: 50%;
+  width: 88px; height: 88px;
+  border-radius: 50%;
+  background: var(--color-red);
+  transform: translate(-50%,-50%);
+  animation: pulse-ring 2s var(--ease-out) infinite;
+}
+.alert-bell__ring:nth-child(2) { animation-delay: 0.6s; }
+
+.info-card { text-align: left; margin: var(--space-6) 0; }
+.info-card .info-row {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-gray-divider);
+}
+.info-card .info-row:last-child { border-bottom: none; }
+.info-card .info-row .icon { color: var(--color-gray-text); width: 22px; height: 22px; flex: 0 0 auto; }
+.responder__actions { display: flex; flex-direction: column; gap: var(--space-3); }
+.responder__caption { margin-top: var(--space-4); color: var(--color-gray-text); font-size: 13px; }
+
+/* ============================================================
+   Screen 7 — First-Responder View
+   ============================================================ */
+.fresponder { background: var(--color-gray-bg); }
+.fresponder__strip {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: max(var(--space-4), env(safe-area-inset-top)) var(--space-4) var(--space-3);
+  background: #fff;
+  box-shadow: var(--shadow-card);
+  z-index: 10;
+}
+.status-dot {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  font-weight: 700; font-size: 15px;
+}
+.status-dot::before {
+  content: ""; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--color-green);
+  box-shadow: 0 0 0 0 rgba(47,158,68,0.5);
+  animation: dot-pulse 1.6s ease-out infinite;
+}
+@keyframes dot-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(47,158,68,0.5); }
+  100% { box-shadow: 0 0 0 10px rgba(47,158,68,0); }
+}
+@media (prefers-reduced-motion: reduce) { .status-dot::before { animation: none; } }
+.fresponder__map { position: relative; flex: 1; }
+.fresponder__map .badge-glass { position: absolute; top: var(--space-3); left: 50%; transform: translateX(-50%); z-index: 6; }
+.route-you { position: absolute; transform: translate(-50%,-50%); z-index: 5; }
+.route-you__dot {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--color-blue); border: 3px solid #fff; box-shadow: var(--shadow-card);
+}
+.fresponder__foot {
+  background: #fff;
+  padding: var(--space-5) var(--space-4) max(var(--space-5), env(safe-area-inset-bottom));
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.05);
+}
+.fresponder__foot .row { display: flex; gap: var(--space-3); margin-top: var(--space-4); }
+.fresponder__foot .row .btn { flex: 1; }
+
+/* ============================================================
+   Screen 8 — Medic Handoff
+   ============================================================ */
+.medic { background: var(--color-gray-bg); }
+.medic__bar {
+  background: var(--color-ink);
+  color: #fff;
+  text-align: center;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  padding: max(var(--space-4), env(safe-area-inset-top)) var(--space-4) var(--space-4);
+}
+.medic__body { padding: var(--space-4); }
+.medic__thumb {
+  height: 130px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  position: relative;
+  margin-top: var(--space-3);
+  background: var(--color-gray-bg);
+  box-shadow: inset 0 0 0 1px var(--color-gray-divider);
+}
+.medic__foot { padding: 0 var(--space-4) max(var(--space-5), env(safe-area-inset-bottom)); }
+
+/* ============================================================
+   Generic app header with back button
+   ============================================================ */
+.appbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: max(var(--space-4), env(safe-area-inset-top)) var(--space-3) var(--space-2);
+}
+.appbar__title { font-weight: 700; font-size: 17px; }
+
+/* Small utility for stacking spacing */
+.stack > * + * { margin-top: var(--space-3); }
+.mt-4 { margin-top: var(--space-4); }
+.mt-5 { margin-top: var(--space-5); }

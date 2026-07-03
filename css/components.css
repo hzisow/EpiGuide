@@ -1,0 +1,251 @@
+/* ============================================================
+   Buttons
+   ============================================================ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: 56px;
+  padding: 0 var(--space-5);
+  border: none;
+  border-radius: var(--radius-lg);
+  font-weight: 600;
+  font-size: 17px;
+  line-height: 1;
+  text-decoration: none;
+  transition: transform var(--duration-fast) var(--ease-out),
+              background-color var(--duration-fast) var(--ease-out),
+              opacity var(--duration-fast) var(--ease-out);
+  user-select: none;
+}
+.btn--block { width: 100%; }
+
+.btn--primary { background: var(--color-red); color: var(--color-white); }
+.btn--primary:active { transform: scale(0.98); background: var(--color-red-dark); }
+
+.btn--secondary {
+  background: transparent;
+  border: 1.5px solid var(--color-red);
+  color: var(--color-red-dark);
+}
+.btn--secondary:active { transform: scale(0.98); background: rgba(224,49,49,0.06); }
+
+.btn--ghost {
+  height: auto;
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border: none;
+  color: var(--color-red-dark);
+  text-decoration: underline;
+  font-size: 16px;
+  font-weight: 500;
+}
+.btn--ghost:active { opacity: 0.7; }
+
+.btn--dark { background: var(--color-ink); color: var(--color-white); }
+.btn--dark:active { transform: scale(0.98); background: #000; }
+
+.btn--on-red { background: var(--color-white); color: var(--color-red-dark); }
+.btn--on-red:active { transform: scale(0.98); background: #f3f3f3; }
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.btn .icon { width: 20px; height: 20px; }
+
+/* ============================================================
+   Cards
+   ============================================================ */
+.card {
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-5);
+}
+.card--elevated { box-shadow: var(--shadow-elevated); }
+.card--flush { padding: 0; overflow: hidden; }
+
+/* ============================================================
+   Badges & pills
+   ============================================================ */
+.badge-glass {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: rgba(0,0,0,0.55);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: var(--color-white);
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--color-gray-bg);
+  color: var(--color-gray-text);
+}
+.pill--green { background: rgba(47,158,68,0.12); color: var(--color-green); }
+
+/* ============================================================
+   Segmented control (Recognize mode toggle)
+   ============================================================ */
+.segmented {
+  display: inline-flex;
+  padding: 4px;
+  background: rgba(0,0,0,0.45);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border-radius: var(--radius-pill);
+}
+.segmented button {
+  border: none;
+  background: transparent;
+  color: rgba(255,255,255,0.85);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: var(--radius-pill);
+  transition: background-color var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
+}
+.segmented button[aria-selected="true"] {
+  background: var(--color-white);
+  color: var(--color-ink);
+}
+
+/* ============================================================
+   Checkbox
+   ============================================================ */
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-3) 0;
+  cursor: pointer;
+}
+.check-row input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+
+.check-box {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1.5px solid var(--color-gray-divider);
+  background: transparent;
+  display: grid;
+  place-items: center;
+  transition: background-color var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out);
+}
+.check-box svg { width: 14px; height: 14px; stroke: var(--color-white); opacity: 0; transition: opacity var(--duration-fast); }
+.check-row input:checked + .check-box {
+  background: var(--color-red);
+  border-color: var(--color-red);
+}
+.check-row input:checked + .check-box svg { opacity: 1; }
+.check-row input:focus-visible + .check-box { outline: 2px solid var(--color-blue); outline-offset: 2px; }
+.check-label { font-size: 16px; line-height: 1.4; }
+
+/* ============================================================
+   Progress bar (Guide)
+   ============================================================ */
+.progress {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+}
+.progress__seg {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-gray-divider);
+  overflow: hidden;
+}
+.progress__seg::after {
+  content: "";
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--color-red);
+  border-radius: var(--radius-pill);
+  transition: width var(--duration-base) var(--ease-out);
+}
+.progress__seg--filled::after { width: 100%; }
+
+/* ============================================================
+   Icon button (replay, back)
+   ============================================================ */
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: transparent;
+  color: var(--color-gray-text);
+}
+.icon-btn:active { background: var(--color-gray-bg); }
+.icon-btn svg { width: 22px; height: 22px; }
+
+/* ============================================================
+   Bottom tab nav
+   ============================================================ */
+.tabbar {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  z-index: 20;
+  display: none;
+  gap: var(--space-2);
+  background: rgba(255,255,255,0.92);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--color-gray-divider);
+  padding: var(--space-2) var(--space-4);
+  padding-bottom: max(var(--space-2), env(safe-area-inset-bottom));
+}
+.tabbar--visible { display: flex; }
+.tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  border: none;
+  background: none;
+  color: var(--color-gray-text);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 0;
+  border-radius: var(--radius-md);
+}
+.tab svg { width: 24px; height: 24px; }
+.tab[aria-selected="true"] { color: var(--color-red-dark); }
+
+/* ============================================================
+   List row (Medic handoff summary)
+   ============================================================ */
+.summary-row {
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-gray-divider);
+}
+.summary-row:last-child { border-bottom: none; }
+.summary-row .label { display: block; margin-bottom: 4px; }
+.summary-row .value { font-weight: 700; font-size: 16px; color: var(--color-ink); }
+
+/* Generic icon sizing */
+.icon { width: 24px; height: 24px; stroke-width: 2; }
