@@ -185,6 +185,14 @@ function boot() {
     history.replaceState({}, '', location.pathname);
     routeToIncomingAlert(pendingAlert);
   }
+
+  // Returning from Google sign-in: the OAuth response is still in the URL
+  // because net.js (which consumes it) is lazy-loaded. Open the Volunteer tab —
+  // that loads net.js, and creating the Supabase client finishes the sign-in
+  // and cleans the URL.
+  if (/[#&?](access_token|code|error_description)=/.test(location.href)) {
+    navigate('optIn');
+  }
 }
 
 // Look up a real alert by id and drop the responder into the alert screen.

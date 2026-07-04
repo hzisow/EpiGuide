@@ -38,8 +38,8 @@ config.js already has them.
 ## Test it with two phones
 
 1. Deploy (push to the Pages branch). Open the site on both phones, both "Add to Home Screen" so push works.
-2. Phone A (volunteer): Volunteer tab, create an account, save what you carry, flip "Available to help" on, allow location and notifications. It should read "Listening for nearby alerts."
-3. Phone B (patient): create a second account on its Volunteer tab (just to be signed in), then walk Recognize into Guide into Dispatch. On Dispatch tap "Alert nearby volunteers."
+2. Phone A (volunteer): Volunteer tab, sign in with Google, save what you carry, flip "Available to help" on, allow location and notifications. It should read "Listening for nearby alerts."
+3. Phone B (patient): sign in with a different Google account on its Volunteer tab (just to be signed in), then walk Recognize into Guide into Dispatch. On Dispatch tap "Alert nearby volunteers."
 4. Phone A should buzz with a push (even with the app closed). Tapping it opens the Responder Alert screen with the real note and distance. Accept, and Phone A moves to the map view; Phone B's Dispatch shows the volunteer "On the way," then "Arrived."
 
 Notes:
@@ -50,6 +50,23 @@ Notes:
 - The simulated 911 banner, ambulance, and ETA on Dispatch are still UI only. The
   volunteer alert is the one real network action on that screen, and it's labeled
   as separate.
+
+## One-time dashboard step: enable Google sign-in
+
+Sign-in uses Google OAuth (no passwords). It needs the Google provider enabled once
+in the Supabase dashboard:
+
+1. In Google Cloud Console, create an OAuth client (type "Web application") and add
+   `https://lpgrbpblbtpyigzsrhgu.supabase.co/auth/v1/callback` as an authorized
+   redirect URI.
+2. In Supabase: Authentication > Sign In / Providers > Google — turn it on and paste
+   the client ID and secret.
+3. In Supabase: Authentication > URL Configuration — set the Site URL to the deployed
+   app and add it to the redirect allow-list (the app passes `redirectTo` back to
+   itself after Google).
+
+Until this is done, the Continue with Google button reports that the provider is
+not enabled.
 
 ## Backend (already live, nothing to do)
 

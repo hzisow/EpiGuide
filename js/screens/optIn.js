@@ -53,41 +53,39 @@ async function refresh() {
 
 // --- signed out -----------------------------------------------------------
 
+const GOOGLE_LOGO = `<svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true">
+  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+  <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+</svg>`;
+
 function renderSignedOut() {
   setBody(`
     <div class="card">
-      <div class="field">
-        <label for="oi-email">Email</label>
-        <input id="oi-email" type="email" autocomplete="email" placeholder="you@example.com" />
-      </div>
-      <div class="field" style="margin-top:12px;">
-        <label for="oi-pass">Password</label>
-        <input id="oi-pass" type="password" autocomplete="current-password" placeholder="At least 6 characters" />
-      </div>
+      <p class="body-sm text-muted" style="margin:0;">
+        Sign in so the network can reach you across sessions and devices.
+      </p>
       <div id="oi-error" class="optin__error" hidden></div>
-      <button class="btn btn--primary btn--block" id="oi-signin" style="margin-top:16px;">Sign in</button>
-      <button class="btn btn--secondary btn--block" id="oi-signup" style="margin-top:10px;">Create account</button>
+      <button class="btn btn--block btn--google" id="oi-google" style="margin-top:16px;">
+        ${GOOGLE_LOGO}<span>Continue with Google</span>
+      </button>
     </div>
-    <p class="optin__note">Your account lets the network reach you across sessions. Volunteers are covered by Good Samaritan laws in all 50 states.</p>`);
+    <p class="optin__note">Volunteers are covered by Good Samaritan laws in all 50 states.</p>`);
 
-  const email = () => root.querySelector('#oi-email').value.trim();
-  const pass = () => root.querySelector('#oi-pass').value;
-  root.querySelector('#oi-signin').addEventListener('click', () => auth('signIn'));
-  root.querySelector('#oi-signup').addEventListener('click', () => auth('signUp'));
-
-  async function auth(method) {
-    if (!email() || pass().length < 6) return showError('Enter an email and a password of at least 6 characters.');
-    const btn = root.querySelector(method === 'signIn' ? '#oi-signin' : '#oi-signup');
-    const label = btn.textContent; btn.textContent = 'One moment…'; btn.setAttribute('aria-disabled', 'true');
+  root.querySelector('#oi-google').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.setAttribute('aria-disabled', 'true');
+    btn.innerHTML = `${GOOGLE_LOGO}<span>Opening Google…</span>`;
     try {
       const n = await net();
-      const user = await n[method](email(), pass());
-      renderSignedIn(user);
-    } catch (e) {
-      btn.textContent = label; btn.removeAttribute('aria-disabled');
-      showError(friendly(e));
+      await n.signInWithGoogle(); // navigates away; nothing runs after this on success
+    } catch (err) {
+      btn.removeAttribute('aria-disabled');
+      btn.innerHTML = `${GOOGLE_LOGO}<span>Continue with Google</span>`;
+      showError(friendly(err));
     }
-  }
+  });
 }
 
 function showError(msg) {
@@ -98,8 +96,9 @@ function showError(msg) {
 
 function friendly(e) {
   const m = (e && e.message) || String(e);
-  if (/already registered/i.test(m)) return 'That email already has an account. Try signing in.';
-  if (/invalid login/i.test(m)) return 'Email or password is incorrect.';
+  if (/provider is not enabled|unsupported provider/i.test(m)) {
+    return 'Google sign-in is not enabled for this project yet. Enable the Google provider in the Supabase dashboard.';
+  }
   return m;
 }
 

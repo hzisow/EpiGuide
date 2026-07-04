@@ -11,27 +11,25 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY, APPROX_DECIMALS } from './config.js';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true },
+  // detectSessionInUrl lets the client finish a Google sign-in: when the OAuth
+  // redirect lands back on the app, creating this client consumes the tokens
+  // from the URL and cleans it up.
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
 });
 
 // ---------------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------------
 
-export async function signIn(email, password) {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+// Kicks off the Google OAuth redirect. On success the browser navigates away to
+// Google and comes back to this page with a session in the URL, so nothing
+// meaningful runs after the await — the reloaded app picks the session up.
+export async function signInWithGoogle() {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: location.origin + location.pathname },
+  });
   if (error) throw error;
-  return data.user;
-}
-
-export async function signUp(email, password) {
-  const { data, error } = await supabase.auth.signUp({ email, password });
-  if (error) throw error;
-  // If email confirmations are on, session may be null; sign in directly for demos.
-  if (!data.session) {
-    return signIn(email, password);
-  }
-  return data.user;
 }
 
 export async function signOut() {

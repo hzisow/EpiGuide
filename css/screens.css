@@ -688,3 +688,11 @@
 .btn--vol:active { background: #1971C2; }
 .route-line path { animation: routeDash 1s linear infinite; }
 @keyframes routeDash { to { stroke-dashoffset: -12; } }
+
+.btn--google {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: var(--color-white); color: var(--color-ink);
+  border: 1px solid var(--color-gray-divider);
+}
+.btn--google:active { background: var(--color-gray-bg); }
+.btn--google svg { flex: 0 0 auto; }
