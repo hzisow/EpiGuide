@@ -3,7 +3,7 @@
 // navigations, cache-first for static app assets. MediaPipe/fonts CDNs are left
 // to the network (they degrade gracefully in the app).
 
-const CACHE = 'epiguide-v6';
+const CACHE = 'epiguide-v7';
 const ASSETS = [
   './',
   './index.html',
@@ -55,6 +55,26 @@ self.addEventListener('fetch', (e) => {
   // Only handle same-origin requests; let CDN/API requests hit the network.
   if (url.origin !== self.location.origin) return;
 
+  // Navigations are NETWORK-FIRST so a fresh deploy shows up on the next
+  // visit; the cache is only a fallback for offline use. (Serving these
+  // cache-first made the site appear to never update.)
+  const isNavigation = request.mode === 'navigate' || request.destination === 'document';
+  if (isNavigation) {
+    e.respondWith(
+      fetch(request)
+        .then((res) => {
+          if (res && res.status === 200) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(request, copy));
+          }
+          return res;
+        })
+        .catch(() => caches.match(request).then((c) => c || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // Static assets: cache-first with background refresh (fast + offline-safe).
   e.respondWith(
     caches.match(request).then((cached) => {
       const network = fetch(request)
