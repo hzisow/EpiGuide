@@ -286,6 +286,15 @@
   margin-bottom: var(--space-6);
 }
 .guide__art svg { width: 100%; height: 100%; }
+.guide__art-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  /* The video's own white matte disappears into the screen background; round
+     the corners so any sub-pixel edge doesn't read as a hard rectangle. */
+  border-radius: var(--radius-lg);
+  background: transparent;
+}
 
 /* ---- Guide illustration animations (ga-*) ----
    Each step's SVG loops a small scene acting out the instruction. All motion

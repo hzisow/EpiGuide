@@ -3,7 +3,7 @@
 // navigations, cache-first for static app assets. MediaPipe/fonts CDNs are left
 // to the network (they degrade gracefully in the app).
 
-const CACHE = 'epiguide-v7';
+const CACHE = 'epiguide-v8';
 const ASSETS = [
   './',
   './index.html',
@@ -34,6 +34,21 @@ const ASSETS = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/favicon-32.png',
+  // Guide step animation loops (Remotion-rendered) — cached so the guide
+  // animates offline; SVG pictograms remain the fallback. WebM is preferred
+  // by the <video> sources; MP4 covers browsers without VP9.
+  './media/guide/confirm.webm',
+  './media/guide/cap.webm',
+  './media/guide/thigh.webm',
+  './media/guide/push.webm',
+  './media/guide/hold.webm',
+  './media/guide/remove.webm',
+  './media/guide/confirm.mp4',
+  './media/guide/cap.mp4',
+  './media/guide/thigh.mp4',
+  './media/guide/push.mp4',
+  './media/guide/hold.mp4',
+  './media/guide/remove.mp4',
 ];
 
 self.addEventListener('install', (e) => {
