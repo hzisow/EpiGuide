@@ -253,3 +253,46 @@
 
 /* Generic icon sizing */
 .icon { width: 24px; height: 24px; stroke-width: 2; }
+
+/* ============================================================
+   Debug panel (hidden ?debug reveal — pitch/QA only)
+   Self-contained dark "console" card so it reads the same over the
+   checklist's light background and the camera sheet's dark one.
+   ============================================================ */
+.debug-panel {
+  margin-top: var(--space-3);
+  background: #14151a;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  color: rgba(255,255,255,0.92);
+  font-size: 12px;
+}
+.debug-panel__head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+.debug-panel__tag {
+  font-weight: 700; letter-spacing: 0.1em;
+  color: #74c0fc;
+}
+.debug-panel__prob {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700; font-size: 14px;
+}
+.debug-panel__flag {
+  color: #ffd43b; font-weight: 600;
+  margin-bottom: var(--space-3);
+}
+.debug-panel__bars { display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto; }
+.debug-bar { display: grid; grid-template-columns: 40% 1fr auto; align-items: center; gap: var(--space-2); }
+.debug-bar__label { color: rgba(255,255,255,0.8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.debug-bar__track { height: 8px; background: rgba(255,255,255,0.1); border-radius: var(--radius-pill); overflow: hidden; }
+.debug-bar__fill { height: 100%; background: linear-gradient(90deg, #4dabf7, #74c0fc); border-radius: var(--radius-pill); }
+.debug-bar__weight { font-variant-numeric: tabular-nums; color: #8ce99a; }
+.debug-panel__empty { color: rgba(255,255,255,0.6); }
+.debug-panel__note {
+  margin-top: var(--space-3);
+  color: rgba(255,255,255,0.55);
+  font-style: italic;
+}

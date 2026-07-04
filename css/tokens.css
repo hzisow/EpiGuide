@@ -9,6 +9,8 @@
   --color-gray-bg: #F8F9FA;
   --color-blue: #1C7ED6;          /* Responder network — PLACEHOLDER, swap for real brand hex if found */
   --color-green: #2F9E44;         /* Clinician/EMS — PLACEHOLDER, swap for real brand hex if found */
+  --color-amber: #E8590C;         /* "Possible — do not wait" caution band (AA on white) */
+  --color-amber-bg: #FFF4E6;      /* soft caution card fill */
 
   /* Spacing scale (4px base unit) */
   --space-1: 4px;

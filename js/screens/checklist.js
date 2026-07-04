@@ -1,9 +1,13 @@
-// Screen 5 — Checklist. Manual symptom fallback off Recognize. Result card is
-// driven by how many CATEGORIES (not items) have at least one checked item.
+// Screen 5 — Checklist. Manual symptom fallback off Recognize. The result card is
+// now driven by the registry-trained model (js/model.js): checked items are mapped
+// to model feature keys, scored with the safety override, and shown as a CATEGORY
+// + urgency. The raw probability + weight breakdown appear ONLY behind ?debug.
 
 import { state, navigate } from '../app.js';
 import { icons } from '../icons.js';
-import { checklistCategories } from '../data/checklistItems.js';
+import { checklistCategories, checklistToModelState } from '../data/checklistItems.js';
+import { scoreWithSafetyOverride } from '../model.js';
+import { isDebugMode, URGENCY_COPY, debugPanelHTML } from '../modelUi.js';
 
 let root, built = false;
 
@@ -21,6 +25,7 @@ function build() {
       <div class="checklist__head">
         <span class="eyebrow">Manual symptom check</span>
         <h1 class="h1" style="margin-top:6px;">Does this match anaphylaxis?</h1>
+        <p class="body-sm honesty-line">Prototype decision support. Not a medical device. In an emergency, call 911.</p>
       </div>
       <div class="scroll-y checklist__body" id="cl-body"></div>
       <div class="checklist__result" id="cl-result"></div>
@@ -58,44 +63,61 @@ function syncFromState() {
   });
 }
 
-function countCategories() {
-  const checked = new Set(state.checklist.checkedItemIds);
-  return checklistCategories.filter((cat) =>
-    cat.items.some((item) => checked.has(item.id))
-  ).length;
+function scoreChecklist() {
+  const modelState = checklistToModelState(state.checklist.checkedItemIds);
+  return scoreWithSafetyOverride(modelState);
 }
 
 function updateResult() {
-  const n = countCategories();
-  const result = root.querySelector('#cl-result');
+  const result = scoreChecklist();
+  const copy = URGENCY_COPY[result.urgency];
+  const el = root.querySelector('#cl-result');
+  const debug = isDebugMode() ? debugPanelHTML(result) : '';
 
-  if (n >= 2) {
-    result.innerHTML = `
+  if (result.urgency === 'act-now') {
+    el.innerHTML = `
       <div class="result-card result-card--urgent">
         <div class="result-card__head">
           ${icons.checkCircle('icon')}
           <div>
-            <div class="result-card__title">Matches anaphylaxis criteria</div>
-            <div class="result-card__sub">Symptoms across ${n} body systems — treat now</div>
+            <div class="result-card__title">${result.category}</div>
+            <div class="result-card__sub">${copy.action}</div>
           </div>
         </div>
         <button class="btn btn--on-red btn--block" id="cl-continue">Continue to Guide</button>
-      </div>`;
-    result.querySelector('#cl-continue').addEventListener('click', () => {
-      state.guide.currentStep = 1;
-      navigate('guide');
-    });
+      </div>${debug}`;
+    wireContinue(el);
+  } else if (result.urgency === 'caution') {
+    el.innerHTML = `
+      <div class="result-card result-card--caution">
+        <div class="result-card__head">
+          ${icons.alertTriangle('icon')}
+          <div>
+            <div class="result-card__title">${result.category}</div>
+            <div class="result-card__sub">${copy.action}</div>
+          </div>
+        </div>
+        <button class="btn btn--primary btn--block" id="cl-continue">Continue to Guide</button>
+      </div>${debug}`;
+    wireContinue(el);
   } else {
     // Deliberately calm, non-alarming state — not a grayed-out urgent card.
-    result.innerHTML = `
+    el.innerHTML = `
       <div class="result-card result-card--calm">
         <div class="result-card__head">
           ${icons.list('icon')}
           <div>
             <div class="result-card__title">Keep checking if more symptoms match</div>
-            <div class="result-card__sub">Anaphylaxis usually affects more than one part of the body.</div>
+            <div class="result-card__sub">${copy.action}</div>
           </div>
         </div>
-      </div>`;
+      </div>${debug}`;
   }
+}
+
+function wireContinue(el) {
+  el.querySelector('#cl-continue')?.addEventListener('click', () => {
+    state.guide.currentStep = 1;
+    navigate('guide');
+  });
 }
