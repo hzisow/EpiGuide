@@ -1,10 +1,12 @@
 // Loads the trained skin-reaction classifier (TensorFlow.js graph model) and
 // scores a cropped skin region from the live camera.
 //
-// The model is MobileNetV2 transfer-learned on the SCIN dermatology registry
-// (CC BY 4.0). Its dependable axis is "visible skin reaction vs normal skin"
-// (~99% on held-out data); the finer hives-vs-other-rash split is weaker (~0.6)
-// and is surfaced only in the debug panel, never used to over-claim.
+// The model is MobileNetV2 transfer-learned on ~6,987 images from the SCIN
+// dermatology registry (CC BY 4.0). Its dependable axis is "visible skin
+// reaction vs normal skin" — 0.99 precision/recall on 1,389 held-out images.
+// The finer hives-vs-other-rash split is NOT reliable (urticaria looks like
+// other rashes, and SCIN is ~10:1 imbalanced toward other conditions), so it is
+// surfaced only in the debug panel and never used to drive a verdict.
 //
 // Loads lazily and degrades gracefully: if TF.js or the weights can't load
 // (offline first run, blocked CDN), callers fall back to landmark-only cues.
