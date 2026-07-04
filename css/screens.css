@@ -689,10 +689,21 @@
 .route-line path { animation: routeDash 1s linear infinite; }
 @keyframes routeDash { to { stroke-dashoffset: -12; } }
 
-.btn--google {
+/* Official "Sign in with Google" button (light theme), per Google's sign-in
+   branding guidelines: 40px tall, #747775 stroke, white fill, 18px logo,
+   medium-weight ~Roboto label in #1F1F1F. */
+.gsi {
   display: flex; align-items: center; justify-content: center; gap: 10px;
-  background: var(--color-white); color: var(--color-ink);
-  border: 1px solid var(--color-gray-divider);
+  width: 100%; height: 40px; padding: 0 12px;
+  background: #FFFFFF; border: 1px solid #747775; border-radius: 20px;
+  font-family: 'Roboto', -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px; font-weight: 500; letter-spacing: 0.25px; color: #1F1F1F;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: background var(--duration-base) var(--ease-out), box-shadow var(--duration-base) var(--ease-out);
 }
-.btn--google:active { background: var(--color-gray-bg); }
-.btn--google svg { flex: 0 0 auto; }
+.gsi:hover { box-shadow: 0 1px 2px rgba(60, 64, 67, 0.30), 0 1px 3px 1px rgba(60, 64, 67, 0.15); }
+.gsi:active { background: #F1F3F4; }
+.gsi:focus-visible { outline: 2px solid var(--color-blue); outline-offset: 2px; }
+.gsi[aria-disabled="true"] { opacity: 0.6; pointer-events: none; }
+.gsi__logo { flex: 0 0 auto; }
+.gsi__text { white-space: nowrap; }
