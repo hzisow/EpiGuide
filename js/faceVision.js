@@ -30,6 +30,27 @@ function dist(a, b) {
   return Math.hypot(dx, dy);
 }
 
+/**
+ * Mapping from video-frame space to an `object-fit: cover` canvas.
+ * Landmarks are normalized to the VIDEO frame; the on-screen element crops the
+ * video to fill, so drawing p.x*canvasWidth is wrong whenever the aspect
+ * ratios differ (always, on phones). scale/ox/oy convert correctly:
+ *   screenX = p.x * videoW * scale + ox
+ */
+export function coverTransform(vw, vh, cw, ch) {
+  const scale = Math.max(cw / vw, ch / vh);
+  return { scale, ox: (cw - vw * scale) / 2, oy: (ch - vh * scale) / 2 };
+}
+
+// Canonical Face Mesh index rings for feature-accurate overlays.
+export const FACE_OVAL = [10,338,297,332,284,251,389,356,454,323,361,288,397,365,
+                          379,378,400,377,152,148,176,149,150,136,172,58,132,93,
+                          234,127,162,21,54,103,67,109];
+export const OUTER_LIPS = [61,146,91,181,84,17,314,405,321,375,291,409,270,269,
+                           267,0,37,39,40,185];
+export const LEFT_EYE  = [33,160,158,133,153,144];
+export const RIGHT_EYE = [362,385,387,263,373,380];
+
 export function createFaceVision() {
   // Offscreen canvas for sampling video pixels at landmark coordinates.
   const buf = document.createElement('canvas');

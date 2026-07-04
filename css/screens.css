@@ -286,6 +286,63 @@
   margin-bottom: var(--space-6);
 }
 .guide__art svg { width: 100%; height: 100%; }
+
+/* ---- Guide illustration animations (ga-*) ----
+   Each step's SVG loops a small scene acting out the instruction. All motion
+   is gated behind prefers-reduced-motion; static frames remain fully legible. */
+@media (prefers-reduced-motion: no-preference) {
+  .ga-squeeze { animation: ga-squeeze 2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  .ga-pop { animation: ga-pop 0.5s var(--ease-out) 0.3s both; transform-box: fill-box; transform-origin: center; }
+  .ga-cap { animation: ga-cap-pull 2.4s ease-in-out infinite; }
+  .ga-cap-arrow { animation: ga-fade-cycle 2.4s ease-in-out infinite; }
+  .ga-approach { animation: ga-approach 2.6s ease-in-out infinite; }
+  .ga-push-arrow { animation: ga-fade-cycle 1.8s ease-in-out infinite; }
+  .ga-jab { animation: ga-jab 1.8s ease-in-out infinite; }
+  .ga-burst { animation: ga-burst 1.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  .ga-clock-hand { animation: ga-rotate 3s linear infinite; }
+  .ga-lift { animation: ga-lift 2.6s ease-in-out infinite; }
+  .ga-ring { animation: ga-ring 2.2s ease-in-out infinite; }
+}
+@keyframes ga-squeeze { 0%, 100% { transform: scale(1); } 50% { transform: scale(0.98); } }
+@keyframes ga-pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes ga-cap-pull {
+  0%, 12% { transform: translateY(0); opacity: 1; }
+  42% { transform: translateY(-30px); opacity: 1; }
+  56% { transform: translateY(-42px); opacity: 0; }
+  57% { transform: translateY(0); opacity: 0; }
+  72%, 100% { transform: translateY(0); opacity: 1; }
+}
+@keyframes ga-fade-cycle { 0%, 8% { opacity: 0; } 24%, 55% { opacity: 1; } 68%, 100% { opacity: 0; } }
+@keyframes ga-approach {
+  0% { transform: translateX(-28px); }
+  42%, 86% { transform: translateX(0); }
+  100% { transform: translateX(-28px); }
+}
+@keyframes ga-jab {
+  0%, 50% { transform: translateX(-6px); }
+  62%, 78% { transform: translateX(4px); }
+  90%, 100% { transform: translateX(-6px); }
+}
+@keyframes ga-burst {
+  0%, 58% { opacity: 0; transform: scale(0.6); }
+  66% { opacity: 1; transform: scale(1); }
+  92%, 100% { opacity: 0; transform: scale(1.12); }
+}
+@keyframes ga-rotate { to { transform: rotate(360deg); } }
+@keyframes ga-lift {
+  0%, 14% { transform: translate(0, 0) rotate(0deg); }
+  52% { transform: translate(-8px, -14px) rotate(-6deg); }
+  78% { transform: translate(-8px, -14px) rotate(-6deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+@keyframes ga-ring {
+  0%, 68% { transform: rotate(0deg); }
+  74% { transform: rotate(-3deg); }
+  80% { transform: rotate(3deg); }
+  86% { transform: rotate(-2deg); }
+  92% { transform: rotate(1deg); }
+  100% { transform: rotate(0deg); }
+}
 .guide__headline { margin-bottom: var(--space-2); }
 .guide__stage-inner {
   display: flex; flex-direction: column; align-items: center;
