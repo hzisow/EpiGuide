@@ -14,7 +14,8 @@ const RED = '#E03131';
 const BLUE = '#1C7ED6';
 const ORANGE = '#F76707';
 const BODY = '#FBF1DC';   // pale device body, like the real trainer
-const GRAY = '#F1F3F5';   // hand / leg — neutral gray, skin-tone-agnostic
+const GRAY = '#E8B48A';   // hand / leg — warm medium skin tone (owner request;
+                          // matches the Remotion-rendered loops in media/guide)
 const PANEL = '#F4F4F4';
 
 const frame = (inner) =>
