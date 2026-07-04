@@ -14,7 +14,7 @@ import { state, navigate } from '../app.js';
 import { icons } from '../icons.js';
 import { scoreWithSafetyOverride } from '../model.js';
 import { isDebugMode, URGENCY_COPY, debugPanelHTML } from '../modelUi.js';
-import { createFaceVision } from '../faceVision.js';
+import { createFaceVision, coverTransform, FACE_OVAL, OUTER_LIPS, LEFT_EYE, RIGHT_EYE } from '../faceVision.js';
 import { ensureHivesModel, classifySkin } from '../hivesModel.js';
 
 let root, video, canvas, ctx, badgesEl, sheetEl, permEl, toolbarEl;
@@ -199,19 +199,122 @@ function onResults(results) {
   if (faces && faces.length) {
     seenFrames += 1;
     const landmarks = faces[0];
-    const box = boundingBox(landmarks, canvas.width, canvas.height);
+    const reading = analyzeFrame(landmarks);
+    const pts = smoothMapped(mapToCanvas(landmarks));
+    const box = featureBox(pts, FACE_OVAL, 0.04);
     lastFaceBox = box;
-    drawBrackets(box);
+    drawFaceOverlay(pts, box, reading);
     positionBadges(box);
-    analyzeFrame(landmarks);
     // Reveal once we have a steady scan window AND the baseline has settled.
     if (readyFrames >= SCAN_FRAMES) reveal();
   } else {
+    smoothPts = null; // reset smoothing when the face is lost
     drawStaticViewfinder();
   }
 }
 
+// --- Coordinate mapping + smoothing -----------------------------------------
+// Landmarks are normalized to the VIDEO frame; the on-screen video uses
+// object-fit: cover (cropped to fill), so we must map through the cover
+// transform or every box lands offset/stretched. Exponential smoothing kills
+// frame-to-frame landmark jitter, which otherwise reads as "inaccurate".
+let smoothPts = null;
+const SMOOTH = 0.45; // 0..1, higher follows faster
+
+function mapToCanvas(landmarks) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const cw = canvas.width, ch = canvas.height;
+  if (!vw || !vh) return landmarks.map((p) => ({ x: p.x * cw, y: p.y * ch }));
+  const { scale, ox, oy } = coverTransform(vw, vh, cw, ch);
+  return landmarks.map((p) => ({ x: p.x * vw * scale + ox, y: p.y * vh * scale + oy }));
+}
+
+function smoothMapped(mapped) {
+  if (!smoothPts || smoothPts.length !== mapped.length) {
+    smoothPts = mapped.map((p) => ({ x: p.x, y: p.y }));
+    return smoothPts;
+  }
+  for (let i = 0; i < mapped.length; i++) {
+    smoothPts[i].x += (mapped[i].x - smoothPts[i].x) * SMOOTH;
+    smoothPts[i].y += (mapped[i].y - smoothPts[i].y) * SMOOTH;
+  }
+  return smoothPts;
+}
+
+function featureBox(pts, indices, pad = 0) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const i of indices) {
+    const p = pts[i];
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const px = (maxX - minX) * pad, py = (maxY - minY) * pad;
+  return { x: minX - px, y: minY - py, w: maxX - minX + px * 2, h: maxY - minY + py * 2 };
+}
+
+// --- Feature-accurate overlay ------------------------------------------------
+const CUE_COLOR = '#ffd43b';   // a cue is persistently detected
+const LINE_COLOR = 'rgba(255,255,255,0.92)';
+
+function tracePath(pts, indices) {
+  ctx.beginPath();
+  ctx.moveTo(pts[indices[0]].x, pts[indices[0]].y);
+  for (let i = 1; i < indices.length; i++) ctx.lineTo(pts[indices[i]].x, pts[indices[i]].y);
+  ctx.closePath();
+}
+
+function drawFaceOverlay(pts, box, reading) {
+  // Face: corner brackets on the true face-oval box.
+  drawBrackets(box);
+
+  // Scanning sweep while we're still accumulating evidence.
+  if (state.recognize.result !== 'match' && readyFrames < SCAN_FRAMES) {
+    const t = (performance.now() % 2200) / 2200;
+    const y = box.y + box.h * (t < 0.5 ? t * 2 : 2 - t * 2);
+    const grad = ctx.createLinearGradient(box.x, 0, box.x + box.w, 0);
+    grad.addColorStop(0, 'rgba(255,255,255,0)');
+    grad.addColorStop(0.5, 'rgba(255,255,255,0.55)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(box.x + 6, y);
+    ctx.lineTo(box.x + box.w - 6, y);
+    ctx.stroke();
+  }
+
+  ctx.lineJoin = 'round';
+
+  // Lips: trace the actual outer-lip contour (this is what the swelling
+  // measurement uses). Amber while a swelling cue is persistently observed.
+  ctx.strokeStyle = reading && reading.ready && reading.swelling ? CUE_COLOR : LINE_COLOR;
+  ctx.lineWidth = 2.5;
+  tracePath(pts, OUTER_LIPS);
+  ctx.stroke();
+
+  // Eyes: thin outlines (eyelid aperture feeds the swelling measure too).
+  ctx.strokeStyle = LINE_COLOR;
+  ctx.lineWidth = 1.5;
+  tracePath(pts, LEFT_EYE); ctx.stroke();
+  tracePath(pts, RIGHT_EYE); ctx.stroke();
+
+  // Cheeks: dashed circles marking where redness is sampled / the CNN crops.
+  const r = Math.max(8, box.w * 0.085);
+  ctx.setLineDash([5, 5]);
+  ctx.strokeStyle = reading && reading.ready && reading.flushing ? CUE_COLOR : 'rgba(255,255,255,0.65)';
+  ctx.lineWidth = 1.8;
+  for (const i of [205, 425]) {
+    ctx.beginPath();
+    ctx.arc(pts[i].x, pts[i].y, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+}
+
 // Run the real vision analysis on one frame and accumulate evidence.
+// Returns the live reading so the overlay can color active cues.
 function analyzeFrame(landmarks) {
   // 1) Landmark geometry + malar redness (js/faceVision.js).
   let reading = null;
@@ -235,6 +338,7 @@ function analyzeFrame(landmarks) {
       } catch (_) { /* transient backend hiccup */ }
     }
   }
+  return reading;
 }
 
 // Draw a mostly-skin cheek patch from the live video into a reused 224² canvas.
@@ -261,30 +365,9 @@ function cheekCrop(landmarks) {
   return cropCanvas;
 }
 
-function boundingBox(landmarks, w, h) {
-  let minX = 1, minY = 1, maxX = 0, maxY = 0;
-  for (const p of landmarks) {
-    if (p.x < minX) minX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y > maxY) maxY = p.y;
-  }
-  // Video is mirrored? Rear camera is not mirrored; object-fit: cover crops.
-  // Approximate mapping to canvas pixels with a small padding.
-  const padX = (maxX - minX) * 0.12;
-  const padY = (maxY - minY) * 0.18;
-  return {
-    x: (minX - padX) * w,
-    y: (minY - padY) * h,
-    w: (maxX - minX + padX * 2) * w,
-    h: (maxY - minY + padY * 2) * h,
-  };
-}
-
 function drawBrackets(box) {
   const { x, y, w, h } = box;
   const len = Math.min(w, h) * 0.28;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.strokeStyle = 'rgba(255,255,255,0.95)';
   ctx.lineWidth = 3;
   ctx.lineCap = 'round';
@@ -303,6 +386,7 @@ function drawBrackets(box) {
 
 function drawStaticViewfinder() {
   const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
   const bw = w * 0.6, bh = h * 0.42;
   drawBrackets({ x: (w - bw) / 2, y: (h - bh) / 2 - h * 0.05, w: bw, h: bh });
 }
