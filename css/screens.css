@@ -707,3 +707,30 @@
 .gsi[aria-disabled="true"] { opacity: 0.6; pointer-events: none; }
 .gsi__logo { flex: 0 0 auto; }
 .gsi__text { white-space: nowrap; }
+
+/* ── Scroll fixes ──────────────────────────────────────────────────────────
+   .screen is a flex column with overflow:hidden, and each screen's flex:1
+   wrapper kept its content-height minimum (flex min-height:auto). Tall content
+   grew past the screen bottom and was clipped, so the inner overflow-y regions
+   never engaged. Cap the chain and let the designated regions scroll. */
+.screen > * { min-height: 0; }
+.scroll-y, .optin__body { min-height: 0; }
+
+/* Fixed chrome must keep its size while the scroll region absorbs overflow. */
+.dispatch__banner, .dispatch__map,
+.checklist__head, .medic__bar, .medic__foot,
+.guide__head, .guide__foot,
+.optin__head, .fresponder__strip, .fresponder__foot { flex: 0 0 auto; }
+
+/* Screens with no dedicated scroll region scroll themselves when the viewport
+   is short. margin:auto on the inner block centers when there is room and
+   collapses to 0 when there is not, so the top stays reachable. */
+.responder { display: flex; flex-direction: column; justify-content: flex-start; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.guide__stage { overflow-y: auto; justify-content: flex-start; -webkit-overflow-scrolling: touch; }
+.guide__stage-inner { margin: auto 0; }
+.recognize__sheet { max-height: 100%; overflow-y: auto; }
+.pre-prompt { overflow-y: auto; }
+
+/* The Volunteer tab shows the bottom tab bar, which overlays screen content —
+   clear it so the last card scrolls fully into view. */
+.optin__body { padding-bottom: calc(76px + max(var(--space-4), env(safe-area-inset-bottom))); }
