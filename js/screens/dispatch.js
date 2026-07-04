@@ -14,6 +14,10 @@ let stopwatchTimer = null;
 let ambulanceTimer = null;
 let etaTimer = null;
 let mapEl;
+let volUnsub = null;
+const responders = new Map(); // responder_id -> latest response row
+let netP;
+function net() { return (netP ||= import('../net.js')); }
 
 export function initDispatch() {
   root = document.querySelector('.screen[data-screen="dispatch"]');
@@ -27,6 +31,7 @@ export function teardownDispatch() {
   clearInterval(stopwatchTimer); stopwatchTimer = null;
   clearInterval(ambulanceTimer); ambulanceTimer = null;
   clearInterval(etaTimer); etaTimer = null;
+  if (volUnsub) { volUnsub(); volUnsub = null; }
 }
 
 function build() {
@@ -54,6 +59,18 @@ function build() {
           <div class="stopwatch__num" id="disp-timer">0:00</div>
         </div>
         <button class="btn btn--ghost" id="disp-log" style="margin:0 auto;display:block;">View symptoms log</button>
+
+        <div class="card vol-card" id="disp-vol">
+          <div class="vol-card__head">
+            <span class="eyebrow" style="color:var(--color-blue);">Nearby volunteers</span>
+            <span class="pill pill--blue">Live network</span>
+          </div>
+          <p class="body-sm text-muted" id="disp-vol-status">
+            Alert people nearby who carry an EpiPen and have opted in. Separate from the 911 call above.
+          </p>
+          <div class="vol-list" id="disp-vol-list"></div>
+          <button class="btn btn--vol btn--block" id="disp-vol-btn">${icons.bell()} Alert nearby volunteers</button>
+        </div>
       </div>
     </div>`;
 
@@ -61,8 +78,65 @@ function build() {
   paintMapBackground(mapEl); // backdrop until the real map loads
 
   root.querySelector('#disp-log').addEventListener('click', () => navigate('medicHandoff'));
+  root.querySelector('#disp-vol-btn').addEventListener('click', alertVolunteers);
 
   built = true;
+}
+
+async function alertVolunteers() {
+  const btn = root.querySelector('#disp-vol-btn');
+  const status = root.querySelector('#disp-vol-status');
+  btn.setAttribute('aria-disabled', 'true');
+  btn.innerHTML = `${icons.bell()} Alerting…`;
+  try {
+    const n = await net();
+    const coords = state.location || await n.getPosition();
+    const note = state.recognize?.result === 'match'
+      ? 'Likely anaphylaxis, epinephrine given'
+      : 'Possible anaphylaxis';
+    const alert = await n.raiseAlert({ lat: coords.lat, lng: coords.lng, note });
+    state.activeAlert = alert;
+
+    btn.hidden = true;
+    status.textContent = 'Alert sent. Waiting for a nearby volunteer to respond…';
+
+    responders.clear();
+    if (volUnsub) volUnsub();
+    volUnsub = n.subscribeToResponses(alert.id, (row) => {
+      if (!row) return;
+      responders.set(row.responder_id, row);
+      renderResponders(coords, n);
+    });
+  } catch (e) {
+    btn.removeAttribute('aria-disabled');
+    btn.innerHTML = `${icons.bell()} Alert nearby volunteers`;
+    const msg = (e && e.message) || String(e);
+    status.textContent = msg === 'SIGN_IN_REQUIRED'
+      ? 'Sign in on the Volunteer tab first, then send the alert.'
+      : 'Could not send the alert. Check your connection and try again.';
+  }
+}
+
+function renderResponders(patientCoords, n) {
+  const list = root.querySelector('#disp-vol-list');
+  const status = root.querySelector('#disp-vol-status');
+  const rows = [...responders.values()].filter((r) => r.status !== 'declined');
+  if (rows.length === 0) {
+    status.textContent = 'Alert sent. Waiting for a nearby volunteer to respond…';
+    list.innerHTML = '';
+    return;
+  }
+  status.textContent = `${rows.length} volunteer${rows.length > 1 ? 's' : ''} responding`;
+  list.innerHTML = rows.map((r) => {
+    let dist = '';
+    if (r.responder_lat != null && r.responder_lng != null && n) {
+      const mi = n.haversineMeters(patientCoords.lat, patientCoords.lng, r.responder_lat, r.responder_lng) / 1609.34;
+      dist = ` · ${mi < 0.1 ? '< 0.1' : mi.toFixed(1)} mi`;
+    }
+    const label = r.status === 'arrived' ? 'Arrived' : 'On the way';
+    return `<div class="vol-row"><span class="vol-row__dot"></span>
+      <span class="body-sm"><strong>Volunteer</strong> ${label}${dist}</span></div>`;
+  }).join('');
 }
 
 function render() {

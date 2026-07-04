@@ -8,6 +8,7 @@ import { initChecklist } from './screens/checklist.js';
 import { initResponderAlert } from './screens/responderAlert.js';
 import { initFirstResponderView } from './screens/firstResponderView.js';
 import { initMedicHandoff } from './screens/medicHandoff.js';
+import { initOptIn } from './screens/optIn.js';
 import { icons } from './icons.js';
 
 export const state = {
@@ -19,14 +20,16 @@ export const state = {
   dispatch: { epinephrineGivenAt: null }, // Date, set when Guide step 6 completes
   location: null,                         // { lat, lng } once geolocation resolves
   cabinets: [],                           // generated mock cabinets
+  incomingAlert: null,                    // real alert routed to a responder
+  activeAlert: null,                      // real alert this device raised (patient side)
 };
 
 // Screens that show the persistent bottom tab bar. The rest of the flow chains
 // forward and hides the tabs so it reads like a focused, linear emergency flow.
-const TAB_SCREENS = ['find', 'recognize'];
+const TAB_SCREENS = ['find', 'recognize', 'optIn'];
 
 const ORDER = [
-  'find', 'recognize', 'guide', 'dispatch', 'checklist',
+  'find', 'recognize', 'guide', 'dispatch', 'checklist', 'optIn',
   'responderAlert', 'firstResponderView', 'medicHandoff',
 ];
 
@@ -41,6 +44,7 @@ const initializers = {
   responderAlert: initResponderAlert,
   firstResponderView: initFirstResponderView,
   medicHandoff: initMedicHandoff,
+  optIn: initOptIn,
 };
 
 // Screens that must re-run their init every time they become active because
@@ -141,6 +145,9 @@ function buildTabBar() {
     </button>
     <button class="tab" data-target="recognize" aria-selected="false">
       ${icons.camera()}<span>Recognize</span>
+    </button>
+    <button class="tab" data-target="optIn" aria-selected="false">
+      ${icons.bell()}<span>Volunteer</span>
     </button>`;
   tabbar.addEventListener('click', (e) => {
     const tab = e.target.closest('.tab');
@@ -163,9 +170,35 @@ function boot() {
   screenEl(first).classList.add('screen--active');
   updateTabs(first);
 
-  // Register a no-op service worker only if one is present; safe to skip.
+  // Register the service worker (offline cache + push handling).
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
+    // A push tap re-opens the app and posts the alert id here.
+    navigator.serviceWorker.addEventListener('message', (ev) => {
+      if (ev.data?.type === 'open-alert') routeToIncomingAlert(ev.data.alert_id);
+    });
+  }
+
+  // Cold start from a push tap: ?alert=<id> in the launch URL.
+  const pendingAlert = new URLSearchParams(location.search).get('alert');
+  if (pendingAlert) {
+    history.replaceState({}, '', location.pathname);
+    routeToIncomingAlert(pendingAlert);
+  }
+}
+
+// Look up a real alert by id and drop the responder into the alert screen.
+async function routeToIncomingAlert(alertId) {
+  if (!alertId) return;
+  try {
+    const net = await import('./net.js');
+    const alert = await net.getAlertById(alertId);
+    if (alert && alert.status === 'active') {
+      state.incomingAlert = alert;
+      navigate('responderAlert');
+    }
+  } catch (e) {
+    console.warn('Could not load incoming alert:', e);
   }
 }
 

@@ -1,0 +1,250 @@
+// Responder-network networking layer. Talks to Supabase (auth, database,
+// realtime) and the notify-responders Edge Function (web push fan-out).
+//
+// IMPORTANT: this module pulls the Supabase client from a CDN, so it must only
+// ever be loaded with `await import('./net.js')` from inside an event handler —
+// never statically imported into the boot graph. That keeps the core emergency
+// flow (Find / Recognize / Guide / Dispatch) fully working offline and immune
+// to any CDN outage.
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY, APPROX_DECIMALS } from './config.js';
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true },
+});
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+export async function signIn(email, password) {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data.user;
+}
+
+export async function signUp(email, password) {
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error) throw error;
+  // If email confirmations are on, session may be null; sign in directly for demos.
+  if (!data.session) {
+    return signIn(email, password);
+  }
+  return data.user;
+}
+
+export async function signOut() {
+  await supabase.auth.signOut();
+}
+
+export async function currentUser() {
+  const { data } = await supabase.auth.getUser();
+  return data.user;
+}
+
+export function onAuthChange(cb) {
+  const { data } = supabase.auth.onAuthStateChange((_event, session) => cb(session?.user || null));
+  return () => data.subscription.unsubscribe();
+}
+
+// ---------------------------------------------------------------------------
+// Geolocation
+// ---------------------------------------------------------------------------
+
+export function getPosition() {
+  return new Promise((resolve, reject) => {
+    if (!('geolocation' in navigator)) return reject(new Error('Location not available'));
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
+      (err) => reject(err),
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 },
+    );
+  });
+}
+
+function coarse(v) {
+  const f = 10 ** APPROX_DECIMALS;
+  return Math.round(v * f) / f;
+}
+
+export function haversineMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// ---------------------------------------------------------------------------
+// Responder profile + availability
+// ---------------------------------------------------------------------------
+
+export async function getProfile() {
+  const user = await currentUser();
+  if (!user) return null;
+  const { data } = await supabase.from('responders').select('*').eq('user_id', user.id).maybeSingle();
+  return data;
+}
+
+export async function saveProfile({ display_name, injector_type, dose }) {
+  const user = await currentUser();
+  if (!user) throw new Error('Sign in first');
+  const { error } = await supabase.from('responders').upsert({
+    user_id: user.id, display_name, injector_type, dose,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'user_id' });
+  if (error) throw error;
+}
+
+// Sets availability. When turning on, writes the coarse position to the public
+// `responders` row and the exact position to the owner-only `responder_locations`
+// row. Exact coordinates are never readable by other users.
+export async function setAvailability(isAvailable, coords) {
+  const user = await currentUser();
+  if (!user) throw new Error('Sign in first');
+
+  const patch = { user_id: user.id, is_available: isAvailable, updated_at: new Date().toISOString() };
+  if (isAvailable && coords) {
+    patch.approx_lat = coarse(coords.lat);
+    patch.approx_lng = coarse(coords.lng);
+  }
+  const { error } = await supabase.from('responders').upsert(patch, { onConflict: 'user_id' });
+  if (error) throw error;
+
+  if (isAvailable && coords) {
+    await supabase.from('responder_locations').upsert({
+      user_id: user.id, lat: coords.lat, lng: coords.lng, updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Web push
+// ---------------------------------------------------------------------------
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+export function pushSupported() {
+  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+
+// Registers this device to receive alerts even when the app is closed.
+export async function enablePush() {
+  if (!pushSupported()) throw new Error('This device or browser does not support push alerts');
+  const user = await currentUser();
+  if (!user) throw new Error('Sign in first');
+
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') throw new Error('Notifications are turned off. Enable them in your browser settings.');
+
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+  }
+  const j = sub.toJSON();
+  const { error } = await supabase.from('push_subscriptions').upsert({
+    user_id: user.id, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth,
+  }, { onConflict: 'endpoint' });
+  if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
+// Alerts — patient side
+// ---------------------------------------------------------------------------
+
+export async function raiseAlert({ lat, lng, note }) {
+  const user = await currentUser();
+  if (!user) throw new Error('SIGN_IN_REQUIRED');
+  const { data, error } = await supabase.from('alerts')
+    .insert({ created_by: user.id, lat, lng, patient_note: note || 'Possible anaphylaxis' })
+    .select().single();
+  if (error) throw error;
+  // Fan out web push to nearby available responders (server-side proximity).
+  try {
+    await supabase.functions.invoke('notify-responders', { body: { alert_id: data.id } });
+  } catch (e) {
+    console.warn('notify-responders failed (alert still live for open apps):', e);
+  }
+  return data;
+}
+
+export async function resolveAlert(id) {
+  await supabase.from('alerts').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', id);
+}
+
+export function subscribeToResponses(alertId, cb) {
+  const channel = supabase.channel(`responses-${alertId}`)
+    .on('postgres_changes',
+      { event: '*', schema: 'public', table: 'alert_responses', filter: `alert_id=eq.${alertId}` },
+      (payload) => cb(payload.new))
+    .subscribe();
+  // Also pull any responses that already exist.
+  supabase.from('alert_responses').select('*').eq('alert_id', alertId)
+    .then(({ data }) => (data || []).forEach(cb));
+  return () => supabase.removeChannel(channel);
+}
+
+// ---------------------------------------------------------------------------
+// Alerts — responder side
+// ---------------------------------------------------------------------------
+
+export async function getAlertById(id) {
+  const { data } = await supabase.from('alerts').select('*').eq('id', id).maybeSingle();
+  return data;
+}
+
+// Live subscription to new alerts. RLS only delivers alerts this user is allowed
+// to see, which requires them to be an available responder.
+export function subscribeToAlerts(cb) {
+  const channel = supabase.channel('alerts-incoming')
+    .on('postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'alerts' },
+      (payload) => { if (payload.new?.status === 'active') cb(payload.new); })
+    .subscribe();
+  return () => supabase.removeChannel(channel);
+}
+
+export async function acceptAlert(alert, coords) {
+  const user = await currentUser();
+  if (!user) throw new Error('Sign in first');
+  const { data, error } = await supabase.from('alert_responses').upsert({
+    alert_id: alert.id, responder_id: user.id, status: 'en_route',
+    responder_lat: coords?.lat ?? null, responder_lng: coords?.lng ?? null,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'alert_id,responder_id' }).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function declineAlert(alert) {
+  const user = await currentUser();
+  if (!user) return;
+  await supabase.from('alert_responses').upsert({
+    alert_id: alert.id, responder_id: user.id, status: 'declined',
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'alert_id,responder_id' });
+}
+
+export async function updateResponderPosition(alertId, coords, status) {
+  const user = await currentUser();
+  if (!user) return;
+  const patch = { updated_at: new Date().toISOString() };
+  if (coords) { patch.responder_lat = coords.lat; patch.responder_lng = coords.lng; }
+  if (status) patch.status = status;
+  await supabase.from('alert_responses').update(patch)
+    .eq('alert_id', alertId).eq('responder_id', user.id);
+}

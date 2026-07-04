@@ -3,7 +3,7 @@
 // navigations, cache-first for static app assets. MediaPipe/fonts CDNs are left
 // to the network (they degrade gracefully in the app).
 
-const CACHE = 'epiguide-v8';
+const CACHE = 'epiguide-v9';
 const ASSETS = [
   './',
   './index.html',
@@ -13,6 +13,9 @@ const ASSETS = [
   './css/components.css',
   './css/screens.css',
   './js/app.js',
+  './js/config.js',
+  './js/net.js',
+  './js/screens/optIn.js',
   './js/icons.js',
   './js/map.js',
   './js/illustrations.js',
@@ -61,6 +64,37 @@ self.addEventListener('activate', (e) => {
       Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
+});
+
+// --- Web push: show an alert even when the app is closed ---------------------
+
+self.addEventListener('push', (e) => {
+  let data = {};
+  try { data = e.data ? e.data.json() : {}; } catch (_) {}
+  const title = data.title || 'EpiGuide alert';
+  const body = data.body || 'Someone nearby needs epinephrine';
+  e.waitUntil(self.registration.showNotification(title, {
+    body,
+    tag: 'epiguide-alert',
+    requireInteraction: true,
+    icon: './icons/icon-192.png',
+    badge: './icons/favicon-32.png',
+    vibrate: [120, 60, 120],
+    data: { alert_id: data.alert_id || '' },
+  }));
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const id = e.notification.data && e.notification.data.alert_id ? e.notification.data.alert_id : '';
+  const url = `./index.html?alert=${encodeURIComponent(id)}`;
+  e.waitUntil((async () => {
+    const clientsArr = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of clientsArr) {
+      if ('focus' in c) { c.postMessage({ type: 'open-alert', alert_id: id }); return c.focus(); }
+    }
+    if (self.clients.openWindow) return self.clients.openWindow(url);
+  })());
 });
 
 self.addEventListener('fetch', (e) => {
