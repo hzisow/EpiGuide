@@ -3,7 +3,7 @@
 // navigations, cache-first for static app assets. MediaPipe/fonts CDNs are left
 // to the network (they degrade gracefully in the app).
 
-const CACHE = 'epiguide-v5';
+const CACHE = 'epiguide-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -16,6 +16,10 @@ const ASSETS = [
   './js/icons.js',
   './js/map.js',
   './js/illustrations.js',
+  './js/model.js',
+  './js/modelUi.js',
+  './js/faceVision.js',
+  './js/hivesModel.js',
   './js/data/cabinets.js',
   './js/data/guideSteps.js',
   './js/data/checklistItems.js',
