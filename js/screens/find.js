@@ -32,7 +32,6 @@ function build() {
           <h2 class="h2">Find the nearest epinephrine</h2>
           <p class="body text-muted mt-4">EpiGuide needs your location to find the nearest epinephrine.</p>
           <button class="btn btn--primary btn--block" id="find-allow">Allow location</button>
-          <button class="btn btn--ghost" id="find-skip" style="margin:12px auto 0;display:block;">Skip — use a demo location</button>
         </div>
       </div>
     </div>`;
@@ -46,9 +45,6 @@ function build() {
   paintMapBackground(mapEl);
 
   root.querySelector('#find-allow').addEventListener('click', requestLocation);
-  root.querySelector('#find-skip').addEventListener('click', () => {
-    useLocation(FALLBACK, { demo: true });
-  });
 
   built = true;
 
