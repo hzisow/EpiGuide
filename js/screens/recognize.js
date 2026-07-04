@@ -9,6 +9,8 @@
 
 import { state, navigate } from '../app.js';
 import { icons } from '../icons.js';
+import { scoreWithSafetyOverride } from '../model.js';
+import { isDebugMode, URGENCY_COPY, debugPanelHTML } from '../modelUi.js';
 
 let root, video, canvas, ctx, badgesEl, sheetEl, permEl, toolbarEl;
 let built = false;
@@ -55,6 +57,8 @@ function build() {
       <div class="recognize__badges" id="rec-badges"></div>
 
       <div class="recognize__sheet" id="rec-sheet" hidden></div>
+
+      <p class="recognize__honesty" id="rec-honesty">Prototype decision support. Not a medical device. In an emergency, call 911.</p>
 
       <div class="perm-dark" id="rec-perm" hidden>
         <div class="pre-prompt__icon">${icons.camera()}</div>
@@ -245,6 +249,13 @@ function positionBadges(box) {
   badgesEl.style.top = `${top}px`;
 }
 
+// Urgency → pill styling for the reveal sheet header.
+const URGENCY_PILL = {
+  'act-now': { cls: 'recognize__pill--act', text: 'Act now' },
+  'caution': { cls: 'recognize__pill--caution', text: 'Caution' },
+  'low': { cls: 'recognize__pill--low', text: 'Keep watching' },
+};
+
 function reveal() {
   if (state.recognize.result === 'match') return; // already revealed
   clearTimeout(revealTimer);
@@ -252,22 +263,43 @@ function reveal() {
   badgesEl.innerHTML = '';
   state.recognize.result = 'match';
 
+  // Vision assists; it does not diagnose. The Face Mesh layer frames the face and
+  // surfaces visible cues — feed those (swelling / flushing) into the SAME model
+  // the checklist uses, then show only the CATEGORY. The raw number stays in ?debug.
+  const visionState = { lip_face_swelling: 1, flushing: 1 };
+  const result = scoreWithSafetyOverride(visionState);
+  const copy = URGENCY_COPY[result.urgency];
+  const pill = URGENCY_PILL[result.urgency];
+  const seen = result.contributions.map((c) => c.label).join(', ') || 'visible cues';
+  const debug = isDebugMode() ? debugPanelHTML(result) : '';
+
+  // For a strong read, continue straight into the Guide. For softer reads, lead the
+  // bystander to the checklist to confirm other body systems (single-system visible
+  // signs are honestly not enough on their own).
+  const strong = result.urgency === 'act-now' || result.urgency === 'caution';
+  const primary = strong
+    ? `<button class="btn btn--primary btn--block" id="rec-confirm">Confirm &amp; Continue</button>
+       <button class="btn btn--ghost" id="rec-checklist">Not sure — use checklist instead</button>`
+    : `<button class="btn btn--primary btn--block" id="rec-checklist">Check other symptoms</button>
+       <button class="btn btn--ghost" id="rec-confirm">Continue to guide anyway</button>`;
+
   sheetEl.hidden = false;
   sheetEl.innerHTML = `
-    <div class="recognize__result-head">Likely signs of anaphylaxis</div>
-    <div class="recognize__result-sub">Facial swelling and skin flushing detected</div>
+    <span class="recognize__pill ${pill.cls}">${pill.text}</span>
+    <div class="recognize__result-head">${result.category}</div>
+    <div class="recognize__result-sub">Camera flagged: ${seen}. ${copy.action}</div>
     <p class="body-sm" style="color:rgba(255,255,255,0.6);margin:-8px 0 16px;">
       EpiGuide highlights visible cues — it doesn't diagnose. You decide.
     </p>
-    <button class="btn btn--primary btn--block" id="rec-confirm">Confirm &amp; Continue</button>
-    <button class="btn btn--ghost" id="rec-unsure">Not sure — use checklist instead</button>`;
+    ${primary}
+    ${debug}`;
 
   sheetEl.querySelector('#rec-confirm').addEventListener('click', () => {
     // Begin the epinephrine timing once the Guide completes (set at step 6).
     state.guide.currentStep = 1;
     navigate('guide');
   });
-  sheetEl.querySelector('#rec-unsure').addEventListener('click', () => navigate('checklist'));
+  sheetEl.querySelector('#rec-checklist').addEventListener('click', () => navigate('checklist'));
 }
 
 function stopCamera() {

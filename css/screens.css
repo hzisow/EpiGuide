@@ -214,6 +214,30 @@
 .recognize__result-head { font-weight: 700; font-size: 22px; line-height: 1.2; }
 .recognize__result-sub { color: rgba(255,255,255,0.72); font-size: 14px; margin-top: 6px; margin-bottom: var(--space-5); }
 
+/* Urgency pill at the top of the reveal sheet. */
+.recognize__pill {
+  display: inline-flex; align-items: center;
+  padding: 4px 12px; margin-bottom: var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.recognize__pill--act { background: var(--color-red); color: #fff; }
+.recognize__pill--caution { background: var(--color-amber); color: #fff; }
+.recognize__pill--low { background: rgba(255,255,255,0.18); color: rgba(255,255,255,0.9); }
+
+/* Persistent honesty line over the viewfinder (hidden behind the reveal sheet). */
+.recognize__honesty {
+  position: absolute;
+  left: var(--space-5); right: var(--space-5);
+  bottom: calc(72px + max(var(--space-3), env(safe-area-inset-bottom)));
+  z-index: 4;
+  text-align: center;
+  font-size: 12px; line-height: 1.4;
+  color: rgba(255,255,255,0.75);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  pointer-events: none;
+}
+
 .recognize__scanline {
   position: absolute;
   left: 0; right: 0;
@@ -361,6 +385,7 @@
    ============================================================ */
 .checklist { background: var(--color-white); }
 .checklist__head { padding: max(var(--space-6), env(safe-area-inset-top)) var(--space-5) var(--space-4); }
+.honesty-line { margin-top: var(--space-3); color: var(--color-gray-text); }
 .checklist__body { padding: 0 var(--space-5) 200px; }
 .checklist__group { margin-top: var(--space-5); }
 .checklist__group-label { margin-bottom: var(--space-1); }
@@ -386,6 +411,15 @@
   box-shadow: var(--shadow-elevated);
 }
 .result-card--urgent .btn { margin-top: var(--space-4); }
+.result-card--caution {
+  background: var(--color-amber-bg);
+  color: var(--color-ink);
+  border: 1px solid rgba(232,89,12,0.35);
+  box-shadow: var(--shadow-card);
+}
+.result-card--caution .result-card__head .icon { color: var(--color-amber); }
+.result-card--caution .result-card__title { color: var(--color-amber); }
+.result-card--caution .btn { margin-top: var(--space-4); }
 .result-card--calm {
   background: var(--color-gray-bg);
   color: var(--color-gray-text);
