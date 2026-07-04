@@ -1,16 +1,21 @@
-// Screen 2 — Recognize. Live rear-camera feed + MediaPipe Face Mesh viewfinder.
+// Screen 2 — Recognize. Live rear-camera feed with REAL computer vision:
+//   • MediaPipe Face Mesh → 468 landmarks → honest lip-swelling / flushing cues
+//     measured against a per-session baseline (js/faceVision.js).
+//   • A MobileNetV2 skin-reaction classifier trained on the SCIN dermatology
+//     registry, running in-browser via TensorFlow.js (js/hivesModel.js).
 //
-// HONESTY NOTE (a core product identity, see Section 1): there is no live
-// confidence score anywhere on this screen, ever. Henry's registry-trained
-// classifier lives in a separate session and isn't bundled here; until it's
-// re-integrated we run MediaPipe Face Mesh to frame the face and drive the
-// plain-language status cues, and we are honest in copy that this is a guided
-// visual check, not a diagnosis — the bystander confirms.
+// HONESTY NOTE (a core product identity): real users still see a CATEGORY only,
+// never a raw score. The vision layer assists — it flags visible cues (skin
+// reaction, facial swelling, flushing) and feeds them into the SAME registry
+// symptom model the checklist uses. It does not diagnose; the bystander decides.
+// When nothing is visible, the app says so honestly instead of inventing a match.
 
 import { state, navigate } from '../app.js';
 import { icons } from '../icons.js';
 import { scoreWithSafetyOverride } from '../model.js';
 import { isDebugMode, URGENCY_COPY, debugPanelHTML } from '../modelUi.js';
+import { createFaceVision } from '../faceVision.js';
+import { ensureHivesModel, classifySkin } from '../hivesModel.js';
 
 let root, video, canvas, ctx, badgesEl, sheetEl, permEl, toolbarEl;
 let built = false;
@@ -23,15 +28,31 @@ let running = false;
 let lastFaceBox = null;
 let seenFrames = 0;
 
+// --- Vision state (reset each visit) ---
+let faceVision = null;         // landmark analyzer
+let hivesReady = false;        // TF.js skin classifier loaded?
+let cropCanvas = null;         // reused 224² canvas for the CNN
+let readyFrames = 0;           // frames counted after baseline warmup
+let swellVotes = 0, flushVotes = 0;
+let reactionSum = 0, reactionN = 0;
+let lastSkinTop = null, lastSkinProb = 0;
+let cnnFrame = 0;
+
 const MEDIAPIPE_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh';
+const SCAN_FRAMES = 30;        // ~1.5–2s of steady framing before the read
+const CNN_EVERY = 8;           // run the CNN every N landmark frames
 
 export function initRecognize() {
   root = document.querySelector('.screen[data-screen="recognize"]');
   if (!built) build();
-  // Reset per-visit UI state.
+  // Reset per-visit UI + vision state.
   state.recognize.result = null;
   seenFrames = 0;
   lastFaceBox = null;
+  faceVision = createFaceVision();
+  readyFrames = swellVotes = flushVotes = 0;
+  reactionSum = reactionN = cnnFrame = 0;
+  lastSkinTop = null; lastSkinProb = 0;
   sheetEl.hidden = true;
   showPermPrompt();
 }
@@ -124,10 +145,15 @@ async function startCamera() {
 
   running = true;
   startBadgeCycle();
+  // Start loading the in-browser skin classifier (non-blocking). If it can't
+  // load (offline first run / blocked CDN), we degrade to landmark-only cues.
+  ensureHivesModel()
+    .then(() => { hivesReady = true; })
+    .catch(() => { hivesReady = false; });
   await setupFaceMesh();
   // Fallback reveal: even if detection is sparse, present the read after a scan
-  // window so the demo always progresses.
-  revealTimer = setTimeout(reveal, 5000);
+  // window so the flow always progresses.
+  revealTimer = setTimeout(reveal, 6000);
 }
 
 function sizeCanvas() {
@@ -172,15 +198,67 @@ function onResults(results) {
   const faces = results.multiFaceLandmarks;
   if (faces && faces.length) {
     seenFrames += 1;
-    const box = boundingBox(faces[0], canvas.width, canvas.height);
+    const landmarks = faces[0];
+    const box = boundingBox(landmarks, canvas.width, canvas.height);
     lastFaceBox = box;
     drawBrackets(box);
     positionBadges(box);
-    // Once a face has been steadily framed, reveal the read a touch early.
-    if (seenFrames === 18) reveal();
+    analyzeFrame(landmarks);
+    // Reveal once we have a steady scan window AND the baseline has settled.
+    if (readyFrames >= SCAN_FRAMES) reveal();
   } else {
     drawStaticViewfinder();
   }
+}
+
+// Run the real vision analysis on one frame and accumulate evidence.
+function analyzeFrame(landmarks) {
+  // 1) Landmark geometry + malar redness (js/faceVision.js).
+  let reading = null;
+  try { reading = faceVision.update(landmarks, video); } catch (_) {}
+  if (reading && reading.ready) {
+    readyFrames += 1;
+    if (reading.swelling) swellVotes += 1;
+    if (reading.flushing) flushVotes += 1;
+  }
+
+  // 2) Trained skin-reaction CNN on a cheek patch, every CNN_EVERY frames.
+  if (hivesReady && (cnnFrame++ % CNN_EVERY === 0)) {
+    const crop = cheekCrop(landmarks);
+    if (crop) {
+      try {
+        const r = classifySkin(crop);
+        if (r) {
+          reactionSum += r.reaction; reactionN += 1;
+          lastSkinTop = r.top; lastSkinProb = r.topProb;
+        }
+      } catch (_) { /* transient backend hiccup */ }
+    }
+  }
+}
+
+// Draw a mostly-skin cheek patch from the live video into a reused 224² canvas.
+// A cheek patch is the most in-distribution input for the classifier (plain skin
+// vs reaction), avoiding hair/eyes/background that would bias it.
+function cheekCrop(landmarks) {
+  const w = video.videoWidth, h = video.videoHeight;
+  if (!w || !h) return null;
+  if (!cropCanvas) { cropCanvas = document.createElement('canvas'); cropCanvas.width = cropCanvas.height = 224; }
+  const cctx = cropCanvas.getContext('2d');
+  // Center between the two malar cheek landmarks; size from interocular distance.
+  const cl = landmarks[205], cr = landmarks[425];
+  const eL = landmarks[133], eR = landmarks[362];
+  const cx = (cl.x + cr.x) / 2, cy = (cl.y + cr.y) / 2;
+  const io = Math.hypot(eL.x - eR.x, eL.y - eR.y) || 0.1;
+  const half = Math.min(0.9, io * 2.2) * 0.5;      // square side ~ 2.2× interocular
+  const sx = Math.max(0, (cx - half)) * w;
+  const sy = Math.max(0, (cy - half)) * h;
+  const side = Math.min(Math.min(w, h), half * 2 * Math.min(w, h));
+  if (side < 24) return null;
+  try {
+    cctx.drawImage(video, sx, sy, side, side, 0, 0, 224, 224);
+  } catch (_) { return null; }
+  return cropCanvas;
 }
 
 function boundingBox(landmarks, w, h) {
@@ -256,6 +334,23 @@ const URGENCY_PILL = {
   'low': { cls: 'recognize__pill--low', text: 'Keep watching' },
 };
 
+// Decide which visible cues the vision layer actually observed, from the
+// accumulated per-frame evidence. Thresholds require a cue to persist across a
+// fraction of the scan (not a single noisy frame).
+function summarizeVision() {
+  const frames = Math.max(1, readyFrames);
+  const avgReaction = reactionN ? reactionSum / reactionN : null;
+  const swelling = swellVotes / frames >= 0.35;
+  const flushing = flushVotes / frames >= 0.35;
+  const skinReaction = avgReaction != null && avgReaction >= 0.6;
+  const modelState = {};
+  if (skinReaction) modelState.hives = 1;            // trained CNN: skin reaction
+  if (flushing) modelState.flushing = 1;             // malar redness (landmarks)
+  if (swelling) modelState.lip_face_swelling = 1;    // lip/eyelid geometry
+  return { modelState, avgReaction, swelling, flushing, skinReaction,
+           any: skinReaction || flushing || swelling };
+}
+
 function reveal() {
   if (state.recognize.result === 'match') return; // already revealed
   clearTimeout(revealTimer);
@@ -263,19 +358,36 @@ function reveal() {
   badgesEl.innerHTML = '';
   state.recognize.result = 'match';
 
-  // Vision assists; it does not diagnose. The Face Mesh layer frames the face and
-  // surfaces visible cues — feed those (swelling / flushing) into the SAME model
-  // the checklist uses, then show only the CATEGORY. The raw number stays in ?debug.
-  const visionState = { lip_face_swelling: 1, flushing: 1 };
-  const result = scoreWithSafetyOverride(visionState);
+  const v = summarizeVision();
+  const result = scoreWithSafetyOverride(v.modelState);
+  const debug = isDebugMode() ? debugPanelHTML(result) + visionDebugHTML(v) : '';
+
+  // HONEST "nothing visible" path — the fake version could never say this.
+  if (!v.any) {
+    sheetEl.hidden = false;
+    sheetEl.innerHTML = `
+      <span class="recognize__pill recognize__pill--low">No visible signs</span>
+      <div class="recognize__result-head">No visible signs detected</div>
+      <div class="recognize__result-sub">The camera didn't see swelling, flushing, or a skin reaction. That doesn't rule anything out — a reaction can be internal (throat, breathing) or start later.</div>
+      <p class="body-sm" style="color:rgba(255,255,255,0.6);margin:-8px 0 16px;">
+        Vision only sees the surface. Check symptoms to be sure.
+      </p>
+      <button class="btn btn--primary btn--block" id="rec-checklist">Check symptoms</button>
+      <button class="btn btn--ghost" id="rec-confirm">Skip to guide</button>
+      ${debug}`;
+    wireRevealButtons();
+    return;
+  }
+
   const copy = URGENCY_COPY[result.urgency];
   const pill = URGENCY_PILL[result.urgency];
-  const seen = result.contributions.map((c) => c.label).join(', ') || 'visible cues';
-  const debug = isDebugMode() ? debugPanelHTML(result) : '';
+  const cues = [];
+  if (v.skinReaction) cues.push('skin reaction');
+  if (v.swelling) cues.push('facial swelling');
+  if (v.flushing) cues.push('flushing');
+  const seen = cues.join(', ');
 
-  // For a strong read, continue straight into the Guide. For softer reads, lead the
-  // bystander to the checklist to confirm other body systems (single-system visible
-  // signs are honestly not enough on their own).
+  // Strong read → straight to Guide. Softer → confirm other systems on checklist.
   const strong = result.urgency === 'act-now' || result.urgency === 'caution';
   const primary = strong
     ? `<button class="btn btn--primary btn--block" id="rec-confirm">Confirm &amp; Continue</button>
@@ -293,13 +405,40 @@ function reveal() {
     </p>
     ${primary}
     ${debug}`;
+  wireRevealButtons();
+}
 
-  sheetEl.querySelector('#rec-confirm').addEventListener('click', () => {
+function wireRevealButtons() {
+  sheetEl.querySelector('#rec-confirm')?.addEventListener('click', () => {
     // Begin the epinephrine timing once the Guide completes (set at step 6).
     state.guide.currentStep = 1;
     navigate('guide');
   });
-  sheetEl.querySelector('#rec-checklist').addEventListener('click', () => navigate('checklist'));
+  sheetEl.querySelector('#rec-checklist')?.addEventListener('click', () => navigate('checklist'));
+}
+
+// Extra debug rows for the vision layer (only shown behind ?debug).
+function visionDebugHTML(v) {
+  const pct = (x) => x == null ? '—' : (x * 100).toFixed(0) + '%';
+  return `
+    <div class="debug-panel" aria-hidden="true">
+      <div class="debug-panel__head">
+        <span class="debug-panel__tag">VISION</span>
+        <span class="debug-panel__prob">skin reaction ${pct(v.avgReaction)}</span>
+      </div>
+      <div class="debug-panel__bars">
+        <div class="debug-bar"><div class="debug-bar__label">CNN top class</div>
+          <div class="debug-bar__track"><div class="debug-bar__fill" style="width:${Math.round(lastSkinProb*100)}%"></div></div>
+          <div class="debug-bar__weight">${lastSkinTop || '—'}</div></div>
+        <div class="debug-bar"><div class="debug-bar__label">Swelling frames</div>
+          <div class="debug-bar__track"><div class="debug-bar__fill" style="width:${Math.round(swellVotes/Math.max(1,readyFrames)*100)}%"></div></div>
+          <div class="debug-bar__weight">${swellVotes}/${readyFrames}</div></div>
+        <div class="debug-bar"><div class="debug-bar__label">Flushing frames</div>
+          <div class="debug-bar__track"><div class="debug-bar__fill" style="width:${Math.round(flushVotes/Math.max(1,readyFrames)*100)}%"></div></div>
+          <div class="debug-bar__weight">${flushVotes}/${readyFrames}</div></div>
+      </div>
+      <div class="debug-panel__note">MobileNetV2 (SCIN registry) + Face Mesh geometry — prototype, not clinical.</div>
+    </div>`;
 }
 
 function stopCamera() {
