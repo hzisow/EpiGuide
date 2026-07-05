@@ -1,3 +1,5 @@
 GitHub Pages build trigger. Pushes over the git protocol stopped enqueueing
 Pages builds for this repo, so deploys are kicked by updating this file via the
 GitHub API after each push. Latest deployed code commit: 20744be (build 32)
+
+retry: 1
