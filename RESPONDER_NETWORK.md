@@ -39,7 +39,7 @@ config.js already has them.
 
 1. Deploy (push to the Pages branch). Open the site on both phones, both "Add to Home Screen" so push works.
 2. Phone A (volunteer): Volunteer tab, sign in with Google, save what you carry, flip "Available to help" on, allow location and notifications. It should read "Listening for nearby alerts."
-3. Phone B (patient): sign in with a different Google account on its Volunteer tab (just to be signed in), then walk Recognize into Guide into Dispatch. On Dispatch tap "Alert nearby volunteers."
+3. Phone B (patient): sign in with a different Google account on its Volunteer tab (just to be signed in), then on the Find screen tap "Alert nearby volunteers." (The same card shows live responder status on Dispatch too.)
 4. Phone A should buzz with a push (even with the app closed). Tapping it opens the Responder Alert screen with the real note and distance. Accept, and Phone A moves to the map view; Phone B's Dispatch shows the volunteer "On the way," then "Arrived."
 
 Notes:
