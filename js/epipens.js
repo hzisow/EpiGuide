@@ -7,11 +7,11 @@
 // net.js (Supabase) is imported lazily so the core app still works offline.
 
 import { icons } from './icons.js';
-import { ocrImage, parseInjectorText } from './ocr.js';
+import { recognizeVariants, parseInjectorText, mergeGuesses } from './ocr.js';
 
 // Visible build tag so it's obvious which version is actually running (helps cut
 // through service-worker caching confusion). Bump alongside the sw.js cache.
-const BUILD = 29;
+const BUILD = 30;
 
 let netP;
 const net = () => (netP ||= import('./net.js'));
@@ -147,18 +147,25 @@ async function runScan(video) {
   let skipped = false;
   ov.querySelector('#ep-skip').addEventListener('click', () => { skipped = true; openForm(null); });
 
-  let ocrInput = null;
+  let variants = null;
   try {
     const canvas = grabCanvas(video);
-    capturedPhoto = canvas.toDataURL('image/jpeg', 0.8); // full frame, for preview
-    ocrInput = preprocessForOcr(canvas);                  // cleaned-up, for OCR
-  } catch (_) { capturedPhoto = null; ocrInput = null; }
+    capturedPhoto = canvas.toDataURL('image/jpeg', 0.85); // full frame, for preview
+    const thresh = preprocessForOcr(canvas, 'threshold');
+    const contrast = preprocessForOcr(canvas, 'contrast');
+    // Multiple passes (different cleanup + segmentation) — merged field-by-field.
+    variants = [
+      { url: thresh, psm: 6 },    // threshold, single block
+      { url: thresh, psm: 11 },   // threshold, sparse text
+      { url: contrast, psm: 6 },  // contrast, single block
+    ];
+  } catch (_) { capturedPhoto = null; variants = null; }
   stopCam();
 
   let guess = null, rawText = '', ocrError = null;
-  if (ocrInput) {
+  if (variants) {
     try {
-      rawText = await ocrImage(ocrInput, {
+      const texts = await recognizeVariants(variants, {
         onProgress: (m) => {
           const el = document.getElementById('ep-scan-status');
           if (!el || !m) return;
@@ -166,7 +173,12 @@ async function runScan(video) {
           el.textContent = `${m.status || 'working'}${pct}`;
         },
       });
-      guess = parseInjectorText(rawText);
+      // Merge per-pass guesses, then fall back to parsing all text together for
+      // anything still missing (e.g. month in one pass, year in another).
+      const perPass = texts.map(parseInjectorText);
+      const combined = parseInjectorText(texts.join('\n'));
+      guess = mergeGuesses([...perPass, combined]);
+      rawText = texts.map((t) => (t || '').replace(/\s+/g, ' ').trim()).filter(Boolean).join('  ·  ');
     } catch (e) { ocrError = (e && e.message) || String(e); }
   } else {
     ocrError = 'Could not capture a photo from the camera.';
@@ -179,13 +191,22 @@ function escapeHtml(s) {
 }
 
 async function startCam(video) {
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    video.srcObject = stream;
-  } catch (_) {
-    // No camera or permission denied — go straight to manual entry.
-    openForm(null);
+  // Request the highest resolution the camera will give — more pixels on the
+  // label means far better OCR. Falls back to a plain request if constraints fail.
+  const tries = [
+    { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } },
+    { video: { facingMode: 'environment' } },
+    { video: true },
+  ];
+  for (const c of tries) {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(c);
+      video.srcObject = stream;
+      return;
+    } catch (_) { /* try the next, less demanding constraint */ }
   }
+  // No camera or permission denied — go straight to manual entry.
+  openForm(null);
 }
 
 function stopCam() {
@@ -205,14 +226,14 @@ function grabCanvas(video) {
 // thresholding — clean black-text-on-white that survives the uneven glare and
 // shadow of a curved glossy label, where a single global contrast/threshold
 // fails. This is the biggest free win for real-world label OCR.
-function preprocessForOcr(srcCanvas) {
+function preprocessForOcr(srcCanvas, mode = 'threshold') {
   const sw = srcCanvas.width, sh = srcCanvas.height;
   // Trim ~7% off each edge — keeps most of the (frame-filling) label, drops the
   // border where the cylinder curls away and the background shows.
   const mx = Math.round(sw * 0.07), my = Math.round(sh * 0.07);
   const cw = sw - mx * 2, ch = sh - my * 2;
-  // Upscale so text is large (Tesseract wants ~30px-tall glyphs). Target ~1500px.
-  const scale = Math.min(3, Math.max(1, 1500 / cw));
+  // Upscale so text is large (Tesseract wants ~30px-tall glyphs). Target ~1600px.
+  const scale = Math.min(3, Math.max(1, 1600 / cw));
   const W = Math.round(cw * scale), H = Math.round(ch * scale);
   const out = document.createElement('canvas');
   out.width = W; out.height = H;
@@ -228,7 +249,24 @@ function preprocessForOcr(srcCanvas) {
   for (let i = 0, p = 0; i < d.length; i += 4, p++) {
     gray[p] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
   }
-  // Integral image for O(1) window sums (Bradley & Roth adaptive threshold).
+
+  if (mode === 'contrast') {
+    // Grayscale + strong contrast stretch — preserves thin/anti-aliased strokes
+    // that a hard threshold can erase. A useful second opinion to the threshold.
+    const contrast = 1.9;
+    for (let p = 0; p < N; p++) {
+      let g = (gray[p] - 128) * contrast + 128;
+      g = g < 0 ? 0 : g > 255 ? 255 : g;
+      const di = p * 4;
+      d[di] = d[di + 1] = d[di + 2] = g;
+      d[di + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    return out.toDataURL('image/png');
+  }
+
+  // Default: Bradley & Roth ADAPTIVE threshold — clean black-on-white that
+  // survives uneven glare/shadow on a curved label (integral image → O(1)/px).
   const IW = W + 1;
   const integ = new Float64Array(IW * (H + 1));
   for (let y = 0; y < H; y++) {

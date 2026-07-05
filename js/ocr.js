@@ -25,52 +25,85 @@ function loadEngine() {
   return enginePromise;
 }
 
-// Run OCR on a data-URL image; returns the raw recognized text.
-// Throws on load failure or timeout — the caller falls back to manual entry.
-// The timeout is generous because the first scan also downloads the ~18 MB of
-// engine + language data; later scans are fast (served from cache).
-export async function ocrImage(dataUrl, { timeoutMs = 45000, onProgress } = {}) {
+// Run OCR over several preprocessed variants / segmentation modes on ONE worker
+// (creating a worker is the slow part, so reuse it), returning the recognized
+// text for each. Running multiple passes and merging the results dramatically
+// improves recall on a hard label — different preprocessing + PSM catch
+// different parts. Throws only if the engine can't load at all.
+export async function recognizeVariants(variants, { onProgress, perPassMs = 20000 } = {}) {
   const Tesseract = await loadEngine();
   const opts = {
     workerPath: VENDOR + 'worker.min.js',
     corePath: VENDOR,
     langPath: VENDOR + 'tessdata',
   };
-  // Only set logger when we actually have a callback — passing logger:undefined
-  // makes Tesseract's worker throw internally ("b is not a function").
   if (onProgress) opts.logger = (m) => { try { onProgress(m); } catch (_) {} };
   const worker = await Tesseract.createWorker('eng', 1, opts);
+  const texts = [];
   try {
-    // PSM 6 = treat the image as a single uniform block of text — better for a
-    // label with a few lines than the default full-page segmentation.
-    try { await worker.setParameters({ tessedit_pageseg_mode: '6' }); } catch (_) {}
-    const text = await Promise.race([
-      worker.recognize(dataUrl).then((r) => r.data.text),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), timeoutMs)),
-    ]);
-    return text || '';
+    for (const v of variants) {
+      try {
+        // PSM controls page segmentation: 6 = single uniform block, 11 = sparse
+        // text (find text anywhere). Trying both catches block and scattered text.
+        await worker.setParameters({ tessedit_pageseg_mode: String(v.psm ?? 6) });
+      } catch (_) {}
+      try {
+        const text = await Promise.race([
+          worker.recognize(v.url).then((r) => r.data.text),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), perPassMs)),
+        ]);
+        texts.push(text || '');
+      } catch (_) {
+        texts.push('');
+      }
+    }
+    return texts;
   } finally {
     worker.terminate();
   }
 }
 
+// Backwards-compatible single-pass helper.
+export async function ocrImage(dataUrl, opts = {}) {
+  const [text] = await recognizeVariants([{ url: dataUrl, psm: 6 }], opts);
+  return text || '';
+}
+
+// Merge several {brand,dose,expiration} guesses into one, taking the first
+// non-null value for each field (order = confidence).
+export function mergeGuesses(guesses) {
+  const out = { brand: null, dose: null, expiration: null };
+  for (const g of guesses) {
+    if (!g) continue;
+    if (!out.brand && g.brand) out.brand = g.brand;
+    if (!out.dose && g.dose) out.dose = g.dose;
+    if (!out.expiration && g.expiration) out.expiration = g.expiration;
+  }
+  return out;
+}
+
 // Parse raw OCR text into best-guess { brand, dose, expiration }. Expiration is
 // 'YYYY-MM' (for <input type="month">). Any field we can't find is null, so the
-// confirm form simply leaves it blank for the user.
+// confirm form simply leaves it blank for the user. Written to tolerate the
+// noise OCR produces on real labels (spacing, dropped/confused characters).
 export function parseInjectorText(raw) {
   const text = (raw || '').replace(/\s+/g, ' ');
   const lower = text.toLowerCase();
+  const alnum = lower.replace(/[^a-z0-9]/g, ''); // fuzzy: ignore spaces/punct/case
 
+  // Brand — tolerate OCR confusing i/l/1 (EplPen, Ep1Pen) and stray spacing.
   let brand = null;
-  if (/epipen\s*(jr|junior)/.test(lower)) brand = 'epipen-jr';
-  else if (/epipen/.test(lower)) brand = 'epipen';
-  else if (/auvi[\s-]?q/.test(lower)) brand = 'auvi-q';
-  else if (/adrenaclick/.test(lower)) brand = 'adrenaclick';
-  else if (/epinephrine|generic/.test(lower)) brand = 'generic';
+  if (/ep[il1]\s*pen\s*(jr|junior)/.test(lower) || /ep[il1]penjr/.test(alnum)) brand = 'epipen-jr';
+  else if (/ep[il1]\s*pen/.test(lower) || /ep[il1]pen/.test(alnum)) brand = 'epipen';
+  else if (/auvi[\s\-]?q/.test(lower) || /auv[il1]q?/.test(alnum)) brand = 'auvi-q';
+  else if (/adrenaclick/.test(alnum)) brand = 'adrenaclick';
+  else if (/ep[il1]nephr|adrenaline/.test(lower)) brand = 'generic';
 
+  // Dose — tolerate O↔0 and a dropped/noisy decimal separator; "mg" often OCRs
+  // as "mg"/"m9"/"g". 0.15 checked first (contains "1", never matches 0.3).
   let dose = null;
-  if (/0\.3\s*mg/.test(lower)) dose = 'adult';
-  else if (/0\.15\s*mg/.test(lower)) dose = 'junior';
+  if (/[o0][.,]?15\s*m?[g9]/.test(lower) || /\b[o0][.,]?15\b/.test(lower)) dose = 'junior';
+  else if (/[o0][.,]?3\s*m?[g9]/.test(lower) || /\b[o0][.,]3\b/.test(lower)) dose = 'adult';
   else if (/\bjr\b|junior/.test(lower)) dose = 'junior';
   else if (brand === 'epipen-jr') dose = 'junior';
   else if (brand === 'epipen') dose = 'adult';
@@ -82,27 +115,30 @@ const MONTHS = {
   jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
   jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
 };
+const pad = (n) => String(n).padStart(2, '0');
 
 function parseExpiration(text) {
   const t = text.toLowerCase();
-  // Prefer whatever follows an "EXP" marker; fall back to scanning the whole string.
-  const near = t.split(/exp(?:iry|ires|iration)?[.:]?/)[1] || t;
+  // Prefer whatever follows an "EXP" marker; fall back to the whole string.
+  const near = t.split(/exp(?:iry|ires|iration)?\.?:?/)[1] || t;
+  const sep = '[\\-\\/. ]+'; // separators incl. spaces (OCR often loses the slash)
+  let m;
 
   // "AUG 2026" / "August 2026"
-  let m = near.match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*,?\s*(20\d{2})/);
-  if (m) return `${m[2]}-${String(MONTHS[m[1]]).padStart(2, '0')}`;
+  m = near.match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*[,\-\/ ]*\s*(20\d{2})/);
+  if (m) return `${m[2]}-${pad(MONTHS[m[1]])}`;
 
-  // "2026-08" / "2026/08"
-  m = near.match(/(20\d{2})[\/\-.](0?[1-9]|1[0-2])\b/);
-  if (m) return `${m[1]}-${String(+m[2]).padStart(2, '0')}`;
+  // "2026-08", "2026 08", "2026/08"
+  m = near.match(new RegExp(`(20\\d{2})\\s*${sep}\\s*(0?[1-9]|1[0-2])\\b`));
+  if (m) return `${m[1]}-${pad(+m[2])}`;
 
-  // "08/2026" / "08-2026"
-  m = near.match(/\b(0?[1-9]|1[0-2])[\/\-.](20\d{2})\b/);
-  if (m) return `${m[2]}-${String(+m[1]).padStart(2, '0')}`;
+  // "08-2026", "08 2026", "08/2026"
+  m = near.match(new RegExp(`\\b(0?[1-9]|1[0-2])\\s*${sep}\\s*(20\\d{2})\\b`));
+  if (m) return `${m[2]}-${pad(+m[1])}`;
 
-  // "08/26" → assume 20xx
-  m = near.match(/\b(0?[1-9]|1[0-2])[\/\-.]([2-4]\d)\b/);
-  if (m) return `20${m[2]}-${String(+m[1]).padStart(2, '0')}`;
+  // "08/26", "08 26" → assume 20xx
+  m = near.match(new RegExp(`\\b(0?[1-9]|1[0-2])\\s*${sep}\\s*([2-4]\\d)\\b`));
+  if (m) return `20${m[2]}-${pad(+m[1])}`;
 
   return null;
 }
