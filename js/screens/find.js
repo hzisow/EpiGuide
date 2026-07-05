@@ -27,11 +27,19 @@ function build() {
       <div class="find__top" id="find-top"></div>
       <div class="find__bottom" id="find-bottom"></div>
       <div class="pre-prompt" id="find-preprompt" hidden>
-        <div class="pre-prompt__card">
-          <div class="pre-prompt__icon">${icons.mapPin()}</div>
-          <h2 class="h2">Find the nearest epinephrine</h2>
-          <p class="body text-muted mt-4">EpiGuide needs your location to find the nearest epinephrine.</p>
+        <div class="welcome">
+          <div class="welcome__hero">
+            <img class="welcome__logo" src="icons/icon-192.png" alt="" width="76" height="76" />
+            <span class="eyebrow welcome__brand">EpiGuide</span>
+            <h1 class="display">Epinephrine, fast.</h1>
+            <p class="body text-muted">Find the nearest auto-injector and get clear, step-by-step help in an anaphylaxis emergency.</p>
+          </div>
+          <div class="welcome__why">
+            ${icons.mapPin()}
+            <p class="body-sm">Your location is used only to find epinephrine near you and show walking distances — and, only if you ask, to alert nearby volunteers.</p>
+          </div>
           <button class="btn btn--primary btn--block" id="find-allow">Allow location</button>
+          <p class="welcome__fine">Free · No account needed · Works offline</p>
         </div>
       </div>
     </div>`;
