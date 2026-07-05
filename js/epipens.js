@@ -11,7 +11,7 @@ import { ocrImage, parseInjectorText } from './ocr.js';
 
 // Visible build tag so it's obvious which version is actually running (helps cut
 // through service-worker caching confusion). Bump alongside the sw.js cache.
-const BUILD = 27;
+const BUILD = 28;
 
 let netP;
 const net = () => (netP ||= import('./net.js'));
@@ -147,13 +147,18 @@ async function runScan(video) {
   let skipped = false;
   ov.querySelector('#ep-skip').addEventListener('click', () => { skipped = true; openForm(null); });
 
-  try { capturedPhoto = grabFrame(video); } catch (_) { capturedPhoto = null; }
+  let ocrInput = null;
+  try {
+    const canvas = grabCanvas(video);
+    capturedPhoto = canvas.toDataURL('image/jpeg', 0.8); // full frame, for preview
+    ocrInput = preprocessForOcr(canvas);                  // cleaned-up, for OCR
+  } catch (_) { capturedPhoto = null; ocrInput = null; }
   stopCam();
 
   let guess = null, rawText = '', ocrError = null;
-  if (capturedPhoto) {
+  if (ocrInput) {
     try {
-      rawText = await ocrImage(capturedPhoto, {
+      rawText = await ocrImage(ocrInput, {
         onProgress: (m) => {
           const el = document.getElementById('ep-scan-status');
           if (!el || !m) return;
@@ -187,12 +192,45 @@ function stopCam() {
   if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
 }
 
-function grabFrame(video) {
+function grabCanvas(video) {
   const c = document.createElement('canvas');
   c.width = video.videoWidth || 640;
   c.height = video.videoHeight || 480;
   c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
-  return c.toDataURL('image/jpeg', 0.7);
+  return c;
+}
+
+// Turn a raw camera frame into something Tesseract can actually read: trim the
+// outer border (background/glare), upscale so characters are tall, convert to
+// grayscale, and stretch contrast. This is the single biggest free win for
+// real-world curved/glossy labels.
+function preprocessForOcr(srcCanvas) {
+  const sw = srcCanvas.width, sh = srcCanvas.height;
+  // Trim ~7% off each edge — keeps most of the (frame-filling) label, drops the
+  // noisy border where the cylinder curls away and the background shows.
+  const mx = Math.round(sw * 0.07), my = Math.round(sh * 0.07);
+  const cw = sw - mx * 2, ch = sh - my * 2;
+  // Upscale so text is large (Tesseract wants ~30px-tall glyphs). Target ~1500px.
+  const scale = Math.min(3, Math.max(1, 1500 / cw));
+  const out = document.createElement('canvas');
+  out.width = Math.round(cw * scale);
+  out.height = Math.round(ch * scale);
+  const ctx = out.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(srcCanvas, mx, my, cw, ch, 0, 0, out.width, out.height);
+  // Grayscale + contrast stretch around mid-gray.
+  const img = ctx.getImageData(0, 0, out.width, out.height);
+  const d = img.data;
+  const contrast = 1.7;
+  for (let i = 0; i < d.length; i += 4) {
+    let g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    g = (g - 128) * contrast + 128;
+    g = g < 0 ? 0 : g > 255 ? 255 : g;
+    d[i] = d[i + 1] = d[i + 2] = g;
+  }
+  ctx.putImageData(img, 0, 0);
+  return out.toDataURL('image/png');
 }
 
 // --- confirm / edit form --------------------------------------------------

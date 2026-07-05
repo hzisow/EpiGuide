@@ -31,13 +31,19 @@ function loadEngine() {
 // engine + language data; later scans are fast (served from cache).
 export async function ocrImage(dataUrl, { timeoutMs = 45000, onProgress } = {}) {
   const Tesseract = await loadEngine();
-  const worker = await Tesseract.createWorker('eng', 1, {
+  const opts = {
     workerPath: VENDOR + 'worker.min.js',
     corePath: VENDOR,
     langPath: VENDOR + 'tessdata',
-    logger: onProgress ? (m) => { try { onProgress(m); } catch (_) {} } : undefined,
-  });
+  };
+  // Only set logger when we actually have a callback — passing logger:undefined
+  // makes Tesseract's worker throw internally ("b is not a function").
+  if (onProgress) opts.logger = (m) => { try { onProgress(m); } catch (_) {} };
+  const worker = await Tesseract.createWorker('eng', 1, opts);
   try {
+    // PSM 6 = treat the image as a single uniform block of text — better for a
+    // label with a few lines than the default full-page segmentation.
+    try { await worker.setParameters({ tessedit_pageseg_mode: '6' }); } catch (_) {}
     const text = await Promise.race([
       worker.recognize(dataUrl).then((r) => r.data.text),
       new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), timeoutMs)),
