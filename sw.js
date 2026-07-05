@@ -4,7 +4,7 @@
 // offline / slow-connection fallback. MediaPipe/fonts CDNs are left to the
 // network (they degrade gracefully in the app).
 
-const CACHE = 'epiguide-v21';
+const CACHE = 'epiguide-v22';
 const ASSETS = [
   './',
   './index.html',
@@ -17,6 +17,7 @@ const ASSETS = [
   './js/config.js',
   './js/net.js',
   './js/volunteerCard.js',
+  './js/epipens.js',
   './js/screens/optIn.js',
   './js/icons.js',
   './js/map.js',

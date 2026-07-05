@@ -8,7 +8,7 @@ import { initChecklist } from './screens/checklist.js';
 import { initResponderAlert } from './screens/responderAlert.js';
 import { initFirstResponderView } from './screens/firstResponderView.js';
 import { initMedicHandoff } from './screens/medicHandoff.js';
-import { initOptIn } from './screens/optIn.js';
+import { initOptIn, teardownOptIn } from './screens/optIn.js';
 import { icons } from './icons.js';
 
 export const state = {
@@ -53,6 +53,7 @@ const ALWAYS_REINIT = new Set([
 const teardowns = {
   recognize: teardownRecognize,
   dispatch: teardownDispatch,
+  optIn: teardownOptIn,
 };
 
 const inited = new Set();

@@ -97,6 +97,38 @@ export async function saveProfile({ display_name, injector_type, dose }) {
   if (error) throw error;
 }
 
+// ---------------------------------------------------------------------------
+// EpiPen inventory (per-user, owner-only via RLS)
+// ---------------------------------------------------------------------------
+
+export async function listEpipens() {
+  const user = await currentUser();
+  if (!user) return [];
+  const { data } = await supabase.from('epipens')
+    .select('*').eq('user_id', user.id).order('expiration_date', { ascending: true });
+  return data || [];
+}
+
+export async function saveEpipen({ id, brand, dose, expiration_date }) {
+  const user = await currentUser();
+  if (!user) throw new Error('Sign in first');
+  const row = { user_id: user.id, brand, dose, expiration_date, updated_at: new Date().toISOString() };
+  if (id) row.id = id;
+  // A fresh photo means a fresh pen — clear any prior reminder so the expiry
+  // job will notify again for the new expiration date.
+  row.reminded_at = null;
+  const { data, error } = await supabase.from('epipens')
+    .upsert(row, { onConflict: 'id' }).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteEpipen(id) {
+  const user = await currentUser();
+  if (!user) return;
+  await supabase.from('epipens').delete().eq('id', id).eq('user_id', user.id);
+}
+
 // Sets availability. When turning on, writes the coarse position to the public
 // `responders` row and the exact position to the owner-only `responder_locations`
 // row. Exact coordinates are never readable by other users.

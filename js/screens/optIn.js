@@ -8,6 +8,7 @@
 
 import { state, navigate } from '../app.js';
 import { icons } from '../icons.js';
+import { mountEpipens, teardownEpipens } from '../epipens.js';
 
 let root, built = false;
 let netP, alertUnsub = null;
@@ -18,6 +19,11 @@ export function initOptIn() {
   root = document.querySelector('.screen[data-screen="optIn"]');
   if (!built) build();
   refresh();
+}
+
+// Stop the EpiPen scanner camera if the user leaves the screen mid-scan.
+export function teardownOptIn() {
+  teardownEpipens();
 }
 
 function build() {
@@ -132,46 +138,14 @@ async function renderSignedIn(user) {
         : `<span class="status-pill status-pill--off">Off</span>`}</div>
     </div>
 
-    <div class="card">
-      <span class="eyebrow">What you carry</span>
-      <div class="field" style="margin-top:10px;">
-        <label for="oi-type">Auto-injector</label>
-        <select id="oi-type">
-          <option value="epipen">EpiPen</option>
-          <option value="auvi-q">Auvi-Q</option>
-          <option value="generic">Generic epinephrine</option>
-          <option value="other">Other</option>
-        </select>
-      </div>
-      <div class="field" style="margin-top:12px;">
-        <label for="oi-dose">Dose</label>
-        <select id="oi-dose">
-          <option value="adult">Adult (0.3 mg)</option>
-          <option value="junior">Junior (0.15 mg)</option>
-          <option value="unknown">Not sure</option>
-        </select>
-      </div>
-      <button class="btn btn--secondary btn--block" id="oi-save" style="margin-top:14px;">Save what I carry</button>
-    </div>
+    <div id="oi-epipens"></div>
 
     <button class="btn btn--ghost" id="oi-signout" style="margin:4px auto 0;display:block;">Sign out</button>
-    <p class="optin__note">Alerts reach you even with the app closed once you allow notifications. Turning off availability stops them.</p>`);
+    <p class="optin__note">We'll remind you before a pen expires. Alerts reach you even with the app closed once you allow notifications; turning off availability stops them.</p>`);
 
-  if (profile?.injector_type) root.querySelector('#oi-type').value = profile.injector_type;
-  if (profile?.dose) root.querySelector('#oi-dose').value = profile.dose;
-
-  root.querySelector('#oi-save').addEventListener('click', async (e) => {
-    const btn = e.currentTarget; const label = btn.textContent; btn.textContent = 'Saving…';
-    try {
-      const n = await net();
-      await n.saveProfile({
-        display_name: 'EpiGuide volunteer',
-        injector_type: root.querySelector('#oi-type').value,
-        dose: root.querySelector('#oi-dose').value,
-      });
-      btn.textContent = 'Saved'; setTimeout(() => (btn.textContent = label), 1400);
-    } catch (err) { btn.textContent = label; setStatus(friendly(err), 'off'); }
-  });
+  // Mount the EpiPen inventory (scan a pen, track expirations). Saving a pen
+  // also updates the availability profile above (what you carry).
+  mountEpipens(root.querySelector('#oi-epipens'));
 
   root.querySelector('#oi-avail').addEventListener('change', (e) => {
     e.target.checked ? goAvailable(e.target) : goUnavailable();
