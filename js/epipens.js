@@ -7,6 +7,7 @@
 // net.js (Supabase) is imported lazily so the core app still works offline.
 
 import { icons } from './icons.js';
+import { ocrImage, parseInjectorText } from './ocr.js';
 
 let netP;
 const net = () => (netP ||= import('./net.js'));
@@ -120,9 +121,31 @@ function openScanner() {
   ov.querySelector('#ep-capture').addEventListener('click', () => {
     capturedPhoto = grabFrame(ov.querySelector('#ep-video'));
     stopCam();
-    openForm(null);
+    runScan();
   });
   startCam(ov.querySelector('#ep-video'));
+}
+
+// On-device OCR: read the label, then open the confirm form pre-filled with the
+// best guesses. Any failure (CDN down, unreadable label, timeout) just opens the
+// form blank — the user can always type it in. Either way they confirm.
+async function runScan() {
+  const ov = overlay();
+  ov.innerHTML = `
+    <div class="ep-sheet ep-scanning">
+      <div class="ep-spinner" aria-hidden="true"></div>
+      <p class="ep-scanning__label">Reading your pen…</p>
+      <button class="btn btn--ghost" id="ep-skip">Skip — enter manually</button>
+    </div>`;
+  let skipped = false;
+  ov.querySelector('#ep-skip').addEventListener('click', () => { skipped = true; openForm(null); });
+
+  let guess = null;
+  try {
+    const text = await ocrImage(capturedPhoto);
+    guess = parseInjectorText(text);
+  } catch (_) { guess = null; }
+  if (!skipped) openForm(null, guess);
 }
 
 async function startCam(video) {
@@ -149,16 +172,23 @@ function grabFrame(video) {
 
 // --- confirm / edit form --------------------------------------------------
 
-function openForm(pen) {
+function openForm(pen, guess) {
   editingId = pen?.id || null;
   const ov = overlay();
   const brandOpts = BRANDS.map((b) => `<option value="${b.v}">${b.label}</option>`).join('');
   const doseOpts = DOSES.map((d) => `<option value="${d.v}">${d.label}</option>`).join('');
   const photo = capturedPhoto ? `<img class="ep-form__photo" src="${capturedPhoto}" alt="Photo of your pen" />` : '';
+  // Did OCR fill in anything?
+  const scanned = guess && (guess.brand || guess.dose || guess.expiration);
+  const heading = editingId ? 'Update EpiPen' : (scanned ? 'Check these are correct' : 'Confirm details');
+  const note = scanned
+    ? `<p class="ep-form__note">${icons.camera()} Scanned from your photo — please double-check before saving.</p>`
+    : '';
   ov.innerHTML = `
     <div class="ep-sheet ep-form">
       <button class="ep-close" id="ep-fx" aria-label="Cancel">✕</button>
-      <h2 class="h2">${editingId ? 'Update EpiPen' : 'Confirm details'}</h2>
+      <h2 class="h2">${heading}</h2>
+      ${note}
       ${photo}
       <div class="field"><label for="ep-brand">Brand</label><select id="ep-brand">${brandOpts}</select></div>
       <div class="field" style="margin-top:12px;"><label for="ep-dose">Dose</label><select id="ep-dose">${doseOpts}</select></div>
@@ -170,6 +200,11 @@ function openForm(pen) {
     ov.querySelector('#ep-brand').value = pen.brand;
     ov.querySelector('#ep-dose').value = pen.dose;
     ov.querySelector('#ep-exp').value = (pen.expiration_date || '').slice(0, 7);
+  } else if (guess) {
+    // Pre-fill only the fields OCR is confident about; leave the rest blank.
+    if (guess.brand) ov.querySelector('#ep-brand').value = guess.brand;
+    if (guess.dose) ov.querySelector('#ep-dose').value = guess.dose;
+    if (guess.expiration) ov.querySelector('#ep-exp').value = guess.expiration;
   }
   ov.querySelector('#ep-fx').addEventListener('click', closeOverlay);
   ov.querySelector('#ep-save').addEventListener('click', savePen);
