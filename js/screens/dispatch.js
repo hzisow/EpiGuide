@@ -17,7 +17,7 @@
 
 import { state, navigate } from '../app.js';
 import { icons } from '../icons.js';
-import { paintMapBackground, mountMap } from '../map.js';
+import { paintMapBackground, mountMap, reverseGeocode } from '../map.js';
 import { mountVolunteerCard } from '../volunteerCard.js';
 
 let root, built = false;
@@ -89,12 +89,19 @@ function build() {
 function render() {
   const coords = state.location;
 
-  // Location line for the dispatcher script — real coordinates, tappable to
-  // open a map. If we somehow have no fix, tell the user to read their address.
+  // Location line for the dispatcher script — real coordinates, upgraded to a
+  // precise street address as soon as reverse geocoding resolves. Tappable to
+  // open a map. If we have no fix, tell the user to read their address.
   const locEl = root.querySelector('#disp-loc');
   if (coords) {
     const ll = `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`;
-    locEl.innerHTML = `Your location: <a href="https://maps.google.com/?q=${coords.lat},${coords.lng}" target="_blank" rel="noopener">${ll}</a>${state.locationIsDemo ? ' <em>(demo)</em>' : ''}`;
+    const link = `<a href="https://maps.google.com/?q=${coords.lat},${coords.lng}" target="_blank" rel="noopener">${ll}</a>`;
+    locEl.innerHTML = `Your location: ${link}`;
+    reverseGeocode(coords.lat, coords.lng).then((addr) => {
+      if (addr && root.querySelector('#disp-loc') === locEl) {
+        locEl.innerHTML = `Your location: <strong>${addr}</strong> · ${link}`;
+      }
+    });
   } else {
     locEl.textContent = 'Your exact address or nearest cross-streets';
   }
@@ -106,8 +113,8 @@ function render() {
     : 'Epinephrine given (note the time)';
 
   // Real map centered on and pinned at the patient (user location). No overlays.
-  const center = coords || { lat: 37.7793, lng: -122.4193 };
-  mountMap(mapEl, center.lat, center.lng, { zoom: 15, interactive: false });
+  // With no fix we leave the painted backdrop rather than centering somewhere fake.
+  if (coords) mountMap(mapEl, coords.lat, coords.lng, { zoom: 15, interactive: false });
 }
 
 // Pre-fill a message with live location + status and hand it to the native

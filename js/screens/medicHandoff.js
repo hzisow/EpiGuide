@@ -1,10 +1,15 @@
-// Screen 8 — Medic Handoff (SIMULATED / demo mode). A structured summary a
-// bystander shows to arriving EMS. Deliberately calm/formal styling — dark, not
-// the red urgency style used elsewhere.
+// Screen 8 — Medic Handoff. A structured summary a bystander shows to arriving
+// EMS. Deliberately calm/formal styling — dark, not the red urgency style used
+// elsewhere. Every value here is REAL: the epinephrine time captured at
+// injection, the symptoms the user actually checked, and the reverse-geocoded
+// address of their real GPS location.
 
 import { state } from '../app.js';
 import { icons } from '../icons.js';
-import { paintMapBackground, mountMap } from '../map.js';
+import { paintMapBackground, mountMap, reverseGeocode } from '../map.js';
+import { checklistCategories } from '../data/checklistItems.js';
+
+const ALL_ITEMS = checklistCategories.flatMap((c) => c.items);
 
 let root, built = false;
 
@@ -21,16 +26,12 @@ function build() {
       <div class="scroll-y medic__body" style="flex:1;">
         <div class="card">
           <div class="summary-row">
-            <span class="eyebrow label">Time of onset</span>
-            <span class="value" id="mh-onset">—</span>
-          </div>
-          <div class="summary-row">
             <span class="eyebrow label">Epinephrine given</span>
             <span class="value" id="mh-epi">—</span>
           </div>
           <div class="summary-row">
             <span class="eyebrow label">Symptoms observed</span>
-            <span class="value">Facial swelling, hives, difficulty breathing</span>
+            <span class="value" id="mh-symptoms">—</span>
           </div>
           <div class="summary-row">
             <span class="eyebrow label">Responder</span>
@@ -41,19 +42,13 @@ function build() {
         <div class="card" style="margin-top:16px;">
           <span class="eyebrow">Patient location</span>
           <div class="medic__thumb map" id="mh-map"><div class="map__canvas"></div></div>
-          <p class="body-sm text-muted" style="margin-top:10px;">412 Main St, Lobby</p>
+          <p class="body-sm text-muted" style="margin-top:10px;" id="mh-addr">Locating…</p>
         </div>
       </div>
       <div class="medic__foot">
         <button class="btn btn--dark btn--block" id="mh-share">${icons.share()} Share full timeline with EMS</button>
       </div>
     </div>`;
-
-  const mapEl = root.querySelector('#mh-map');
-  const center = state.location || { lat: 37.7793, lng: -122.4193 };
-  paintMapBackground(mapEl); // backdrop until the map loads
-  // Static real-map thumbnail pinned at the patient location.
-  mountMap(mapEl, center.lat, center.lng, { zoom: 16, interactive: false });
 
   root.querySelector('#mh-share').addEventListener('click', () => {
     const btn = root.querySelector('#mh-share');
@@ -65,19 +60,32 @@ function build() {
 }
 
 function render() {
+  // Epinephrine — real timestamp captured at Guide step 6.
   const epi = state.dispatch.epinephrineGivenAt;
-  const onsetEl = root.querySelector('#mh-onset');
-  const epiEl = root.querySelector('#mh-epi');
+  root.querySelector('#mh-epi').textContent = epi
+    ? `${formatTime(epi)} (1 dose, thigh)`
+    : 'Not yet given';
 
-  if (epi) {
-    // Simulated onset: a couple of minutes before epinephrine for a plausible demo.
-    const onset = new Date(epi.getTime() - 3 * 60 * 1000);
-    onsetEl.textContent = formatTime(onset);
-    epiEl.textContent = `${formatTime(epi)} (1 dose, thigh)`;
+  // Symptoms — the boxes the user actually checked, not a canned list.
+  const ids = state.checklist.checkedItemIds || [];
+  const labels = ids.map((id) => ALL_ITEMS.find((i) => i.id === id)?.label).filter(Boolean);
+  root.querySelector('#mh-symptoms').textContent = labels.length
+    ? labels.join(', ')
+    : 'Not recorded — describe to EMS';
+
+  // Location — real map + reverse-geocoded street address.
+  const mapEl = root.querySelector('#mh-map');
+  const addrEl = root.querySelector('#mh-addr');
+  const coords = state.location;
+  paintMapBackground(mapEl);
+  if (coords) {
+    mountMap(mapEl, coords.lat, coords.lng, { zoom: 16, interactive: false });
+    addrEl.textContent = `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`;
+    reverseGeocode(coords.lat, coords.lng).then((addr) => {
+      if (addr && root.querySelector('#mh-addr') === addrEl) addrEl.textContent = addr;
+    });
   } else {
-    // Demo defaults if Guide hasn't been completed this session.
-    onsetEl.textContent = 'Approx. 3 min ago';
-    epiEl.textContent = 'Pending (1 dose, thigh)';
+    addrEl.textContent = 'Location unavailable — read your address to EMS';
   }
 }
 

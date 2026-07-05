@@ -60,6 +60,27 @@ export function googleMapsEmbedUrl(lat, lng, zoom = 16) {
   return `https://maps.google.com/maps?q=${lat},${lng}&z=${zoom}&hl=en&output=embed`;
 }
 
+// Reverse-geocode real coordinates into a concise, precise street address using
+// the free OpenStreetMap Nominatim service (no API key; the browser's Referer
+// satisfies its usage policy). Returns a formatted address string, or null if it
+// can't be resolved / the network is down — callers fall back to raw coordinates.
+export async function reverseGeocode(lat, lng) {
+  try {
+    const url = 'https://nominatim.openstreetmap.org/reverse?format=json&zoom=18'
+      + `&addressdetails=1&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`;
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const a = data.address || {};
+    const street = [a.house_number, a.road || a.pedestrian || a.footway].filter(Boolean).join(' ');
+    const locality = a.city || a.town || a.village || a.suburb || a.hamlet || a.county;
+    const parts = [street || a.road, locality, a.state, a.postcode].filter(Boolean);
+    return parts.join(', ') || data.display_name || null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // Mount (or update) a Google Maps iframe inside `container`. Returns the iframe.
 // interactive:false disables panning (for static thumbnails / status views).
 export function mountMap(container, lat, lng, { zoom = 16, interactive = true } = {}) {

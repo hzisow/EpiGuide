@@ -1,16 +1,13 @@
-// Screen 1 — Find. Real device geolocation, mock cabinets generated relative to
-// the user, and a real interactive Google map (embed) you can pan and zoom.
-// Honest permission pre-prompt before the native dialog.
+// Screen 1 — Find. Real device geolocation on a real interactive Google map, an
+// honest permission pre-prompt, and the real "alert nearby volunteers" network.
+// (An earlier build listed nearby EpiPen cabinets, but there is no real public
+// registry of cabinet locations, so that fabricated data was removed — the
+// volunteer network is the real way to get a pen fast.)
 
 import { state } from '../app.js';
 import { icons } from '../icons.js';
-import { generateMockCabinets } from '../data/cabinets.js';
-import { paintMapBackground, mountMap } from '../map.js';
+import { paintMapBackground, mountMap, reverseGeocode } from '../map.js';
 import { mountVolunteerCard } from '../volunteerCard.js';
-
-// A neutral fallback location (San Francisco) so the demo still renders if the
-// user denies location or geolocation is unavailable. Clearly flagged in the UI.
-const FALLBACK = { lat: 37.7793, lng: -122.4193 };
 
 let root, mapEl, topCard, bottomCard, prePrompt;
 let built = false;
@@ -34,13 +31,14 @@ function build() {
             <img class="welcome__logo" src="icons/icon-192.png" alt="" width="76" height="76" />
             <span class="eyebrow welcome__brand">EpiGuide</span>
             <h1 class="display">Epinephrine, fast.</h1>
-            <p class="body text-muted">Find the nearest auto-injector and get clear, step-by-step help in an anaphylaxis emergency.</p>
+            <p class="body text-muted">Find help and get clear, step-by-step guidance in an anaphylaxis emergency.</p>
           </div>
           <div class="welcome__why">
             ${icons.mapPin()}
-            <p class="body-sm">Your location is used only to find epinephrine near you and show walking distances — and, only if you ask, to alert nearby volunteers.</p>
+            <p class="body-sm">Your location is used only to show your address for 911 and — only if you ask — to alert nearby volunteers who carry an EpiPen.</p>
           </div>
           <button class="btn btn--primary btn--block" id="find-allow">Allow location</button>
+          <p class="welcome__error" id="find-error" hidden></p>
           <p class="welcome__fine">Free · No account needed · Works offline</p>
         </div>
       </div>
@@ -67,62 +65,60 @@ function build() {
 
 function requestLocation() {
   const allowBtn = root.querySelector('#find-allow');
+  const errEl = root.querySelector('#find-error');
+  errEl.hidden = true;
   allowBtn.textContent = 'Locating…';
   allowBtn.setAttribute('aria-disabled', 'true');
 
+  const fail = (msg) => {
+    allowBtn.textContent = 'Allow location';
+    allowBtn.removeAttribute('aria-disabled');
+    errEl.textContent = msg;
+    errEl.hidden = false;
+  };
+
   if (!('geolocation' in navigator)) {
-    useLocation(FALLBACK, { demo: true });
+    fail('This device can’t share its location. Turn on location services and try again.');
     return;
   }
   navigator.geolocation.getCurrentPosition(
-    (pos) => useLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }, { demo: false }),
-    () => useLocation(FALLBACK, { demo: true }),
+    (pos) => useLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+    () => fail('Location access is needed to find help nearby. Enable it in your browser settings, then try again.'),
     { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
   );
 }
 
-function useLocation(coords, { demo }) {
+function useLocation(coords) {
   state.location = coords;
-  state.locationIsDemo = demo;
-  state.cabinets = generateMockCabinets(coords.lat, coords.lng);
   prePrompt.hidden = true;
   render();
 }
 
 function render() {
   rendered = true;
-  const nearest = state.cabinets[0];
-  // Real, interactive Google map centered on and pinned at the nearest cabinet.
-  mountMap(mapEl, nearest.lat, nearest.lng, { zoom: 16, interactive: true });
-  renderCards(nearest);
+  const { lat, lng } = state.location;
+  // Real, interactive Google map centered on and pinned at the user's location.
+  mountMap(mapEl, lat, lng, { zoom: 16, interactive: true });
+  renderCards();
 }
 
-function renderCards(nearest) {
+function renderCards() {
+  const { lat, lng } = state.location;
+
+  // "You are here" — real reverse-geocoded address, useful to read to 911 or a
+  // volunteer. Falls back to raw coordinates if geocoding can't resolve.
   topCard.innerHTML = `
     <div class="card card--elevated">
-      <span class="eyebrow">Nearest epinephrine</span>
-      <h1 class="h1" style="margin-top:6px;">${nearest.feet} ft away</h1>
-      <p class="body-sm text-muted" style="margin-top:2px;">${nearest.walkMin} min walk · ${nearest.label}</p>
-      ${state.locationIsDemo ? `<div class="status-note">${icons.crosshair()}<span>Demo location — allow location for real distances</span></div>` : ''}
+      <span class="eyebrow">You are here</span>
+      <div class="body" id="find-addr" style="font-weight:600;margin-top:6px;">Locating your address…</div>
+      <p class="body-sm text-muted" style="margin-top:2px;">Share this with 911 or a nearby volunteer.</p>
     </div>`;
+  reverseGeocode(lat, lng).then((addr) => {
+    const el = topCard.querySelector('#find-addr');
+    if (el) el.textContent = addr || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  });
 
-  const maps = `https://maps.apple.com/?daddr=${nearest.lat},${nearest.lng}`;
-  bottomCard.innerHTML = `
-    <div class="card card--elevated">
-      <div class="find__route">
-        <div class="find__route-icon">${icons.route()}</div>
-        <div>
-          <div class="body" style="font-weight:600;">${nearest.feet} ft · ${nearest.walkMin} min walk</div>
-          <div class="body-sm text-muted">${nearest.label}</div>
-        </div>
-      </div>
-      <a class="btn btn--primary btn--block" href="${maps}" target="_blank" rel="noopener">
-        ${icons.navigation()} Get Directions
-      </a>
-    </div>
-    <div id="find-vol"></div>`;
-
-  // Plan B, right where the decision happens: can't reach the cabinet in time
-  // (or there is none)? Summon a nearby volunteer who carries an EpiPen.
+  // The real Plan B: summon a nearby volunteer who carries an EpiPen.
+  bottomCard.innerHTML = `<div id="find-vol"></div>`;
   mountVolunteerCard(bottomCard.querySelector('#find-vol'));
 }

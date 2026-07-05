@@ -19,7 +19,6 @@ export const state = {
   checklist: { checkedItemIds: [] },
   dispatch: { epinephrineGivenAt: null }, // Date, set when Guide step 6 completes
   location: null,                         // { lat, lng } once geolocation resolves
-  cabinets: [],                           // generated mock cabinets
   incomingAlert: null,                    // real alert routed to a responder
   activeAlert: null,                      // real alert this device raised (patient side)
 };

@@ -1,6 +1,6 @@
 // Screen 6 — Responder Alert. Shown to a nearby opt-in carrier when a real alert
-// arrives (via live subscription or a push tap). Falls back to scripted content
-// if opened manually with no active alert, so single-device demos still work.
+// arrives (via live subscription or a push tap). With no live alert it shows an
+// honest empty state rather than fabricated content.
 
 import { state, navigate } from '../app.js';
 import { icons } from '../icons.js';
@@ -53,10 +53,12 @@ function render() {
   const metaEl = root.querySelector('#ra-meta');
 
   if (!alert) {
-    // Scripted fallback (manual/QA demo).
-    metaEl.textContent = '0.2 mi away · Sent 8 seconds ago';
-    noteEl.textContent = 'Adult, possible anaphylaxis';
-    root.querySelector('#ra-loc').textContent = '412 Main St, Lobby';
+    // No live alert — honest empty state (this screen is normally reached from a
+    // real push/subscription, never with fabricated content).
+    metaEl.textContent = 'No active alert right now';
+    noteEl.textContent = 'You’ll be notified when someone nearby needs help';
+    root.querySelector('#ra-loc').textContent = 'Location shares when you accept an alert';
+    root.querySelector('#ra-eta').textContent = '—';
     return;
   }
 
