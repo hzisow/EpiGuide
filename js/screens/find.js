@@ -6,6 +6,7 @@ import { state } from '../app.js';
 import { icons } from '../icons.js';
 import { generateMockCabinets } from '../data/cabinets.js';
 import { paintMapBackground, mountMap } from '../map.js';
+import { mountVolunteerCard } from '../volunteerCard.js';
 
 // A neutral fallback location (San Francisco) so the demo still renders if the
 // user denies location or geolocation is unavailable. Clearly flagged in the UI.
@@ -118,5 +119,10 @@ function renderCards(nearest) {
       <a class="btn btn--primary btn--block" href="${maps}" target="_blank" rel="noopener">
         ${icons.navigation()} Get Directions
       </a>
-    </div>`;
+    </div>
+    <div id="find-vol"></div>`;
+
+  // Plan B, right where the decision happens: can't reach the cabinet in time
+  // (or there is none)? Summon a nearby volunteer who carries an EpiPen.
+  mountVolunteerCard(bottomCard.querySelector('#find-vol'));
 }

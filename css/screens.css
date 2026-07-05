@@ -756,6 +756,19 @@
 .recognize__sheet { max-height: 100%; overflow-y: auto; }
 .pre-prompt { overflow-y: auto; }
 
-/* The Volunteer tab shows the bottom tab bar, which overlays screen content —
-   clear it so the last card scrolls fully into view. */
-.optin__body { padding-bottom: calc(76px + max(var(--space-4), env(safe-area-inset-bottom))); }
+
+/* ── Persistent tab bar ─────────────────────────────────────────────────────
+   The tab bar shows on every screen. Its space is reserved STRUCTURALLY: each
+   screen gets bottom padding equal to the bar's height, so content sizes to
+   the visible area and screens only scroll when content genuinely overflows —
+   no phantom scroll into blank space (native-app feel). Full-bleed screens
+   (find, recognize) keep content flowing under the translucent bar and clear
+   it with their own absolute offsets, as before. */
+:root { --tabbar-h: calc(60px + max(var(--space-2), env(safe-area-inset-bottom))); }
+.screen { padding-bottom: var(--tabbar-h); }
+.screen[data-screen="find"],
+.screen[data-screen="recognize"] { padding-bottom: 0; }
+
+/* No rubber-band chaining out of inner scroll regions — feels native. */
+.scroll-y, .optin__body, .responder, .guide__stage,
+.recognize__sheet, .pre-prompt { overscroll-behavior: contain; }

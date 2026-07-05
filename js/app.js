@@ -24,10 +24,6 @@ export const state = {
   activeAlert: null,                      // real alert this device raised (patient side)
 };
 
-// Screens that show the persistent bottom tab bar. The rest of the flow chains
-// forward and hides the tabs so it reads like a focused, linear emergency flow.
-const TAB_SCREENS = ['find', 'recognize', 'optIn'];
-
 const ORDER = [
   'find', 'recognize', 'guide', 'dispatch', 'checklist', 'optIn',
   'responderAlert', 'firstResponderView', 'medicHandoff',
@@ -127,11 +123,13 @@ export function navigate(to, { direction } = {}) {
   setTimeout(done, 400);
 }
 
+// The tab bar stays visible on every screen so Find / Recognize / Volunteer are
+// always one tap away. Screens deeper in a flow (guide, dispatch, …) simply
+// show no selected tab. Full-screen permission modals still hide it (.epi-modal).
 function updateTabs(active) {
   const tabbar = document.getElementById('tabbar');
   if (!tabbar) return;
-  const showTabs = TAB_SCREENS.includes(active);
-  tabbar.classList.toggle('tabbar--visible', showTabs);
+  tabbar.classList.add('tabbar--visible');
   tabbar.querySelectorAll('.tab').forEach((tab) => {
     tab.setAttribute('aria-selected', String(tab.dataset.target === active));
   });
