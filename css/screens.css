@@ -304,11 +304,15 @@
 }
 .guide__art {
   width: 100%;
-  max-width: 300px;
+  /* Shrink the square on short screens so the whole step (art + headline +
+     button) fits without scrolling. 42vh caps height-driven overflow; 300px
+     caps it on tall screens. */
+  max-width: min(300px, 42vh);
   aspect-ratio: 1 / 1;
   display: grid;
   place-items: center;
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-5);
+  flex: 0 0 auto;
 }
 .guide__art svg { width: 100%; height: 100%; }
 .guide__art-video {
@@ -745,6 +749,10 @@
    is short. margin:auto on the inner block centers when there is room and
    collapses to 0 when there is not, so the top stays reachable. */
 .responder { display: flex; flex-direction: column; justify-content: flex-start; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+/* Clear the floating tab bar so the last action ("Can't make it") is never
+   hidden behind it. The screen-level padding doesn't reach inside this
+   centered, self-scrolling region, so pad it directly. */
+.responder__inner { padding-bottom: var(--tabbar-h); }
 .guide__stage { overflow-y: auto; justify-content: flex-start; -webkit-overflow-scrolling: touch; }
 .guide__stage-inner { margin: auto 0; }
 .recognize__sheet { max-height: 100%; overflow-y: auto; }

@@ -1,9 +1,10 @@
 // Minimal offline cache so EpiGuide keeps working once loaded — critical for an
 // emergency tool that may be opened with poor connectivity. Network-first for
-// navigations, cache-first for static app assets. MediaPipe/fonts CDNs are left
-// to the network (they degrade gracefully in the app).
+// ALL same-origin requests (fresh code always wins online), with the cache as an
+// offline / slow-connection fallback. MediaPipe/fonts CDNs are left to the
+// network (they degrade gracefully in the app).
 
-const CACHE = 'epiguide-v19';
+const CACHE = 'epiguide-v20';
 const ASSETS = [
   './',
   './index.html',
@@ -105,38 +106,31 @@ self.addEventListener('fetch', (e) => {
   // Only handle same-origin requests; let CDN/API requests hit the network.
   if (url.origin !== self.location.origin) return;
 
-  // Navigations are NETWORK-FIRST so a fresh deploy shows up on the next
-  // visit; the cache is only a fallback for offline use. (Serving these
-  // cache-first made the site appear to never update.)
-  const isNavigation = request.mode === 'navigate' || request.destination === 'document';
-  if (isNavigation) {
-    e.respondWith(
-      fetch(request)
-        .then((res) => {
-          if (res && res.status === 200) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(request, copy));
-          }
-          return res;
-        })
-        .catch(() => caches.match(request).then((c) => c || caches.match('./index.html')))
-    );
-    return;
-  }
-
-  // Static assets: cache-first with background refresh (fast + offline-safe).
-  e.respondWith(
-    caches.match(request).then((cached) => {
-      const network = fetch(request)
-        .then((res) => {
-          if (res && res.status === 200) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(request, copy));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
-  );
+  // NETWORK-FIRST for everything same-origin (HTML, JS, CSS, media). Online
+  // users always get the freshly deployed code — previously the app's JS/CSS
+  // were served cache-first, so a new index.html would still load STALE modules
+  // and the site appeared to never update. The cache is now purely an offline /
+  // very-slow-connection fallback, raced against a short timeout so poor
+  // connectivity never blocks the UI (this is an emergency app).
+  e.respondWith(networkFirst(request));
 });
+
+async function networkFirst(request) {
+  const cache = await caches.open(CACHE);
+  try {
+    const fresh = await Promise.race([
+      fetch(request),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3500)),
+    ]);
+    if (fresh && fresh.status === 200) cache.put(request, fresh.clone());
+    return fresh;
+  } catch (_) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    if (request.mode === 'navigate') {
+      const shell = await cache.match('./index.html');
+      if (shell) return shell;
+    }
+    throw new Error('offline and not cached');
+  }
+}
