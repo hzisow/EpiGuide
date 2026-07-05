@@ -114,7 +114,7 @@
   position: absolute;
   left: var(--space-4);
   right: var(--space-4);
-  bottom: calc(72px + max(var(--space-4), env(safe-area-inset-bottom)));
+  bottom: calc(var(--tabbar-h) + var(--space-3));
   z-index: 10;
 }
 .find__route {
@@ -141,7 +141,7 @@
     radial-gradient(130% 55% at 50% -8%, rgba(224, 49, 49, 0.09), transparent 65%),
     var(--color-white);
   padding: max(var(--space-5), env(safe-area-inset-top)) var(--space-5)
-           max(var(--space-6), env(safe-area-inset-bottom));
+           calc(var(--tabbar-h) + var(--space-3));
 }
 .welcome {
   height: 100%;
@@ -231,8 +231,8 @@
   backdrop-filter: blur(18px);
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   padding: var(--space-6);
-  /* Clear the bottom tab bar so the ghost "use checklist" link stays tappable. */
-  padding-bottom: calc(76px + max(var(--space-4), env(safe-area-inset-bottom)));
+  /* Clear the floating tab bar so the ghost "use checklist" link stays tappable. */
+  padding-bottom: calc(var(--tabbar-h) + var(--space-4));
   color: #fff;
 }
 .recognize__sheet .btn--ghost { color: #ff8787; display: block; margin: var(--space-4) auto 0; }
@@ -254,7 +254,7 @@
 .recognize__honesty {
   position: absolute;
   left: var(--space-5); right: var(--space-5);
-  bottom: calc(72px + max(var(--space-3), env(safe-area-inset-bottom)));
+  bottom: calc(var(--tabbar-h) + var(--space-2));
   z-index: 4;
   text-align: center;
   font-size: 12px; line-height: 1.4;
@@ -758,14 +758,15 @@
 
 
 /* ── Persistent tab bar ─────────────────────────────────────────────────────
-   The tab bar shows on every screen. Its space is reserved STRUCTURALLY: each
-   screen gets bottom padding equal to the bar's height, so content sizes to
-   the visible area and screens only scroll when content genuinely overflows —
+   The floating tab bar shows on every screen. Its space is reserved
+   STRUCTURALLY: each screen gets bottom padding equal to the bar's occupied
+   height (bar + its inset from the bottom edge), so content sizes to the
+   visible area and screens only scroll when content genuinely overflows —
    no phantom scroll into blank space (native-app feel). Full-bleed screens
-   (find, recognize) keep content flowing under the translucent bar and clear
-   it with their own absolute offsets, as before. */
-:root { --tabbar-h: calc(60px + max(var(--space-2), env(safe-area-inset-bottom))); }
-.screen { padding-bottom: var(--tabbar-h); }
+   (find, recognize) keep content flowing under the glass bar and clear it
+   with their own absolute offsets. */
+:root { --tabbar-h: calc(62px + max(var(--space-4), env(safe-area-inset-bottom))); }
+.screen { padding-bottom: calc(var(--tabbar-h) + var(--space-2)); }
 .screen[data-screen="find"],
 .screen[data-screen="recognize"] { padding-bottom: 0; }
 

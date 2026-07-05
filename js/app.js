@@ -1,6 +1,6 @@
 // Global state + screen router. No framework, no build step — plain ES modules.
 
-import { initFind, teardownFind } from './screens/find.js';
+import { initFind } from './screens/find.js';
 import { initRecognize, teardownRecognize } from './screens/recognize.js';
 import { initGuide } from './screens/guide.js';
 import { initDispatch, teardownDispatch } from './screens/dispatch.js';
@@ -47,14 +47,10 @@ const initializers = {
 // they depend on live state (timestamps, checked items, current step).
 const ALWAYS_REINIT = new Set([
   'guide', 'dispatch', 'checklist', 'medicHandoff', 'firstResponderView',
-  // find is cheap to re-init: it only re-raises the location modal flag if the
-  // modal is still pending (the map mounts once and stays).
-  'find',
 ]);
 
 // Teardown hooks (release camera, stop intervals) when leaving a screen.
 const teardowns = {
-  find: teardownFind,
   recognize: teardownRecognize,
   dispatch: teardownDispatch,
 };
@@ -127,9 +123,9 @@ export function navigate(to, { direction } = {}) {
   setTimeout(done, 400);
 }
 
-// The tab bar stays visible on every screen so Find / Recognize / Volunteer are
-// always one tap away. Screens deeper in a flow (guide, dispatch, …) simply
-// show no selected tab. Full-screen permission modals still hide it (.epi-modal).
+// The tab bar stays visible on every screen — including full-screen permission
+// modals — so Find / Recognize / Volunteer are always one tap away. Screens
+// deeper in a flow (guide, dispatch, …) simply show no selected tab.
 function updateTabs(active) {
   const tabbar = document.getElementById('tabbar');
   if (!tabbar) return;

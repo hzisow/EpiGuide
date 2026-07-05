@@ -19,20 +19,7 @@ let rendered = false; // map + cards mounted (don't remount on every tab visit)
 export function initFind() {
   root = document.querySelector('.screen[data-screen="find"]');
   if (!built) build();
-  if (state.location) {
-    if (!rendered) render();
-  } else if (prePrompt && !prePrompt.hidden) {
-    // Coming back with the location modal still pending: re-hide the tab bar
-    // (teardownFind cleared the flag when we left).
-    document.getElementById('app').classList.add('epi-modal');
-  }
-}
-
-// Leaving Find while the location modal is up must not leave the tab bar
-// hidden on other screens — e.g. landing on Volunteer after the Google
-// sign-in redirect, where the modal's epi-modal flag used to stick around.
-export function teardownFind() {
-  document.getElementById('app').classList.remove('epi-modal');
+  if (state.location && !rendered) render();
 }
 
 function build() {
@@ -75,7 +62,6 @@ function build() {
     render();
   } else {
     prePrompt.hidden = false;
-    document.getElementById('app').classList.add('epi-modal');
   }
 }
 
@@ -100,7 +86,6 @@ function useLocation(coords, { demo }) {
   state.locationIsDemo = demo;
   state.cabinets = generateMockCabinets(coords.lat, coords.lng);
   prePrompt.hidden = true;
-  document.getElementById('app').classList.remove('epi-modal');
   render();
 }
 
