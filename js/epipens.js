@@ -12,7 +12,7 @@ import { recognizeVariants, parseInjectorText, mergeGuesses } from './ocr.js';
 
 // Visible build tag so it's obvious which version is actually running (helps cut
 // through service-worker caching confusion). Bump alongside the sw.js cache.
-const BUILD = 32;
+const BUILD = 33;
 
 let netP;
 const net = () => (netP ||= import('./net.js'));
@@ -386,13 +386,22 @@ function openForm(pen, guess, scan) {
       if (!scanned) {
         diag = `<p class="ep-form__diag">Couldn’t read the label clearly — enter the details below.</p>`;
       }
-    } else if (scan.ocrError) {
-      diag = `<p class="ep-form__diag ep-form__diag--err">Scan error: ${escapeHtml(scan.ocrError)}</p>`;
     } else {
-      const clean = (scan.rawText || '').replace(/\s+/g, ' ').trim();
-      diag = clean
-        ? `<p class="ep-form__diag">Scan read: “${escapeHtml(clean.slice(0, 90))}”${scanned ? '' : ' — couldn’t match brand/dose/date, please fill in below.'}</p>`
-        : `<p class="ep-form__diag">Couldn’t read the label — enter the details below.</p>`;
+      const bits = [];
+      // If the AI reader was tried and failed, show WHY (e.g. "Sign in to use the
+      // camera reader", or an HTTP error) so the fallback isn't a silent mystery.
+      if (scan.visionError) {
+        bits.push(`<p class="ep-form__diag ep-form__diag--err">Camera reader: ${escapeHtml(scan.visionError)}</p>`);
+      }
+      if (scan.ocrError) {
+        bits.push(`<p class="ep-form__diag ep-form__diag--err">Scan error: ${escapeHtml(scan.ocrError)}</p>`);
+      } else {
+        const clean = (scan.rawText || '').replace(/\s+/g, ' ').trim();
+        bits.push(clean
+          ? `<p class="ep-form__diag">Scan read: “${escapeHtml(clean.slice(0, 90))}”${scanned ? '' : ' — couldn’t match brand/dose/date, please fill in below.'}</p>`
+          : `<p class="ep-form__diag">Couldn’t read the label — enter the details below.</p>`);
+      }
+      diag = bits.join('');
     }
   }
   ov.innerHTML = `

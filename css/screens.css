@@ -315,6 +315,11 @@
   flex: 0 0 auto;
 }
 .guide__art svg { width: 100%; height: 100%; }
+/* On the hold step the countdown ring + "Keep holding…" occupy the foot, so the
+   illustration is shrunk to keep art + headline + subline + ring on one screen
+   without scrolling. */
+.guide--hold .guide__art { max-width: min(200px, 26vh); margin-bottom: var(--space-3); }
+.guide--hold .guide__foot { padding-top: var(--space-2); }
 .guide__art-video {
   width: 100%;
   height: 100%;

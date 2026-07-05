@@ -55,35 +55,20 @@ function renderStep() {
     seg.classList.toggle('progress__seg--filled', i < n);
   });
 
+  // Compact the layout on the hold step: it adds a countdown ring below the
+  // stage, so the illustration is shrunk (via .guide--hold) to keep the whole
+  // step on one screen without scrolling.
+  root.querySelector('.guide').classList.toggle('guide--hold', !!step.isHold);
+
   const stage = root.querySelector('#guide-stage');
-  // Prefer the pre-rendered animated loop (Remotion, media/guide/*.mp4); fall
-  // back to the static SVG pictogram for reduced-motion users or if the video
-  // can't load (e.g. first offline visit before the media is cached).
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const art = reduceMotion
-    ? illustrations[step.illustrationKey]()
-    : `<video class="guide__art-video" autoplay muted loop playsinline
-              disablepictureinpicture aria-hidden="true">
-         <source src="media/guide/${step.illustrationKey}.webm" type="video/webm">
-         <source src="media/guide/${step.illustrationKey}.mp4" type="video/mp4">
-       </video>`;
+  // Flat SVG pictograms, drawn inline so they're fully styleable and animate via
+  // CSS (ga-* classes). These replaced the pre-rendered Remotion loops.
   stage.innerHTML = `
     <div class="guide__stage-inner" key="${n}">
-      <div class="guide__art">${art}</div>
+      <div class="guide__art">${illustrations[step.illustrationKey]()}</div>
       <h1 class="display guide__headline">${step.headline}</h1>
       <p class="body-sm text-muted">${step.subline}</p>
     </div>`;
-  const vid = stage.querySelector('.guide__art-video');
-  if (vid) {
-    // With <source> children, load failures fire on the LAST source element;
-    // also poll readyState as a belt-and-braces fallback to the static SVG.
-    const fallback = () => {
-      const artEl = stage.querySelector('.guide__art');
-      if (artEl && artEl.contains(vid)) artEl.innerHTML = illustrations[step.illustrationKey]();
-    };
-    vid.querySelector('source:last-child').addEventListener('error', fallback);
-    setTimeout(() => { if (vid.isConnected && vid.readyState === 0) fallback(); }, 4000);
-  }
 
   const foot = root.querySelector('#guide-foot');
   clearCountdown();
