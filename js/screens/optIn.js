@@ -172,6 +172,7 @@ async function goAvailable(toggleEl) {
     const n = await net();
     const coords = await n.getPosition();
     await n.setAvailability(true, coords);
+    state.responderSelfCoords = coords; // used to gate alerts by true distance
 
     // Best-effort push; the live in-app path works regardless.
     let pushMsg = '';
@@ -203,6 +204,13 @@ async function goUnavailable() {
 function startListening(n) {
   if (alertUnsub) alertUnsub();
   alertUnsub = n.subscribeToAlerts((alert) => {
+    // The realtime channel (gated by RLS) reaches every available responder;
+    // enforce the 4.5-mile alerting radius here by true distance, mirroring the
+    // server-side push fan-out. If we don't yet know our own position, allow it.
+    const self = state.responderSelfCoords;
+    if (self && Number.isFinite(alert.lat) && Number.isFinite(alert.lng)) {
+      if (n.haversineMeters(self.lat, self.lng, alert.lat, alert.lng) > n.ALERT_RADIUS_M) return;
+    }
     state.incomingAlert = alert;
     navigate('responderAlert');
   });

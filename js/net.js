@@ -66,6 +66,10 @@ function coarse(v) {
   return Math.round(v * f) / f;
 }
 
+// Alerting radius — a volunteer farther than this can't bring a pen in time, so
+// they aren't alerted. 4.5 miles ≈ 7242 m. Mirrors the server-side push fan-out.
+export const ALERT_RADIUS_M = 7242;
+
 export function haversineMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000;
   const toRad = (d) => (d * Math.PI) / 180;
@@ -293,9 +297,18 @@ export function subscribeToAlerts(cb) {
 export async function acceptAlert(alert, coords) {
   const user = await currentUser();
   if (!user) throw new Error('Sign in first');
+  // Attach the injector this volunteer carries so the patient's guide can match
+  // the pen that's actually on the way.
+  let injector = null, dose = null;
+  try {
+    const { data: prof } = await supabase.from('responders')
+      .select('injector_type,dose').eq('user_id', user.id).maybeSingle();
+    if (prof) { injector = prof.injector_type; dose = prof.dose; }
+  } catch (_) {}
   const { data, error } = await supabase.from('alert_responses').upsert({
     alert_id: alert.id, responder_id: user.id, status: 'en_route',
     responder_lat: coords?.lat ?? null, responder_lng: coords?.lng ?? null,
+    responder_injector: injector, responder_dose: dose,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'alert_id,responder_id' }).select().single();
   if (error) throw error;

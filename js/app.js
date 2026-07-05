@@ -15,10 +15,11 @@ export const state = {
   currentScreen: 'find', // find | recognize | guide | dispatch | checklist |
                          // responderAlert | firstResponderView | medicHandoff
   recognize: { result: null },            // null | 'match' | 'noMatch'
-  guide: { currentStep: 1 },              // 1-6
+  guide: { currentStep: 1, device: null, deviceLocked: false }, // device: which injector's steps
   checklist: { checkedItemIds: [] },
   dispatch: { epinephrineGivenAt: null }, // Date, set when Guide step 6 completes
   location: null,                         // { lat, lng } once geolocation resolves
+  responderSelfCoords: null,              // this responder's own location (radius filter)
   incomingAlert: null,                    // real alert routed to a responder
   activeAlert: null,                      // real alert this device raised (patient side)
 };

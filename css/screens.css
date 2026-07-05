@@ -393,6 +393,28 @@
   100% { transform: rotate(0deg); }
 }
 .guide__headline { margin-bottom: var(--space-2); }
+
+/* Device chip + picker (per-device guides) */
+.guide__head-actions { display: flex; align-items: center; gap: var(--space-2); }
+.guide__device {
+  border: 1px solid var(--color-gray-divider);
+  background: var(--color-white);
+  color: var(--color-ink);
+  font-size: 12px; font-weight: 600;
+  padding: 5px 10px; border-radius: 999px;
+  white-space: nowrap; cursor: pointer;
+}
+.guide__picker { gap: var(--space-2); }
+.guide__picker-list { display: flex; flex-direction: column; gap: var(--space-3); width: 100%; margin-top: var(--space-4); }
+.guide__picker-btn {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 18px var(--space-4);
+  border: 1px solid var(--color-gray-divider); border-radius: var(--radius-lg);
+  background: var(--color-white); color: var(--color-ink);
+  font-size: 16px; font-weight: 600; cursor: pointer;
+}
+.guide__picker-btn:active { background: var(--color-gray-bg, #f4f4f4); }
+.guide__picker-chevron { color: var(--color-gray-text); font-size: 20px; }
 .guide__stage-inner {
   display: flex; flex-direction: column; align-items: center;
   animation: guide-step-in var(--duration-base) var(--ease-out);

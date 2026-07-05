@@ -1,12 +1,13 @@
 // Shared "Alert nearby volunteers" card. Its home is the Find screen — the
-// moment someone realizes there's no auto-injector on hand, they can either
-// run for the nearest cabinet or summon a volunteer who carries one. Dispatch
-// re-mounts the same card as a live status panel once an alert is out.
+// moment someone realizes there's no auto-injector on hand, they can summon a
+// volunteer who carries one. Dispatch re-mounts the same card as a live status
+// panel once an alert is out.
 //
 // net.js (Supabase) stays lazily imported so the core flow works offline.
 
 import { state } from './app.js';
 import { icons } from './icons.js';
+import { injectorToDevice, guides } from './data/guideSteps.js';
 
 let netP;
 const net = () => (netP ||= import('./net.js'));
@@ -90,6 +91,15 @@ function render(n, alert) {
     return;
   }
   status.textContent = `${rows.length} volunteer${rows.length > 1 ? 's' : ''} responding`;
+
+  // Auto-match the injection guide to the pen a responding volunteer is bringing,
+  // so the patient's walkthrough is for the RIGHT device — unless the patient has
+  // manually picked one, which always wins.
+  if (!state.guide.deviceLocked) {
+    const withPen = rows.find((r) => r.responder_injector && injectorToDevice(r.responder_injector));
+    if (withPen) state.guide.device = injectorToDevice(withPen.responder_injector);
+  }
+
   list.innerHTML = rows.map((r) => {
     let dist = '';
     if (r.responder_lat != null && r.responder_lng != null) {
@@ -97,7 +107,9 @@ function render(n, alert) {
       dist = ` · ${mi < 0.1 ? '< 0.1' : mi.toFixed(1)} mi`;
     }
     const label = r.status === 'arrived' ? 'Arrived' : 'On the way';
+    const dev = injectorToDevice(r.responder_injector);
+    const carrying = dev ? ` · ${guides[dev].label}` : '';
     return `<div class="vol-row"><span class="vol-row__dot"></span>
-      <span class="body-sm"><strong>Volunteer</strong> ${label}${dist}</span></div>`;
+      <span class="body-sm"><strong>Volunteer</strong> ${label}${dist}${carrying}</span></div>`;
   }).join('');
 }
