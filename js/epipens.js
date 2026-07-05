@@ -12,7 +12,7 @@ import { recognizeVariants, parseInjectorText, mergeGuesses } from './ocr.js';
 
 // Visible build tag so it's obvious which version is actually running (helps cut
 // through service-worker caching confusion). Bump alongside the sw.js cache.
-const BUILD = 31;
+const BUILD = 32;
 
 let netP;
 const net = () => (netP ||= import('./net.js'));
@@ -97,12 +97,23 @@ function renderRow(p) {
 function expiryStatus(dateStr) {
   const exp = new Date(dateStr + 'T00:00:00');
   const days = Math.round((exp - new Date()) / 86400000);
-  const mLabel = exp.toLocaleString(undefined, { month: 'short', year: 'numeric' });
-  if (days < 0) return { label: `Expired ${mLabel}`, cls: 'ep-pill--red' };
-  if (days <= 30) return { label: `Expires ${mLabel} · ${days} day${days === 1 ? '' : 's'} left`, cls: 'ep-pill--red' };
+  const dLabel = exp.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  if (days < 0) return { label: `Expired ${dLabel}`, cls: 'ep-pill--red' };
+  if (days <= 30) return { label: `Expires ${dLabel} · ${days} day${days === 1 ? '' : 's'} left`, cls: 'ep-pill--red' };
   const months = Math.max(1, Math.round(days / 30.4));
-  if (days <= 92) return { label: `Expires ${mLabel} · ${months} mo left`, cls: 'ep-pill--amber' };
-  return { label: `Expires ${mLabel} · in ${months} mo`, cls: 'ep-pill--green' };
+  if (days <= 92) return { label: `Expires ${dLabel} · ${months} mo left`, cls: 'ep-pill--amber' };
+  return { label: `Expires ${dLabel} · in ${months} mo`, cls: 'ep-pill--green' };
+}
+
+// Normalize a scan's expiration to a full YYYY-MM-DD for the date picker. Vision
+// already returns a full date; the on-device OCR fallback returns YYYY-MM, which
+// we expand to the last calendar day of that month (a pen is good through then).
+function toFullDate(s) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = /^(\d{4})-(\d{2})$/.exec(s);
+  if (!m) return '';
+  const last = new Date(Number(m[1]), Number(m[2]), 0).getDate();
+  return `${m[1]}-${m[2]}-${String(last).padStart(2, '0')}`;
 }
 
 // --- camera scanner -------------------------------------------------------
@@ -393,19 +404,21 @@ function openForm(pen, guess, scan) {
       ${photo}
       <div class="field"><label for="ep-brand">Brand</label><select id="ep-brand">${brandOpts}</select></div>
       <div class="field" style="margin-top:12px;"><label for="ep-dose">Dose</label><select id="ep-dose">${doseOpts}</select></div>
-      <div class="field" style="margin-top:12px;"><label for="ep-exp">Expiration (month & year)</label><input id="ep-exp" type="month" /></div>
+      <div class="field" style="margin-top:12px;"><label for="ep-exp">Expiration date</label><input id="ep-exp" type="date" /></div>
       <div id="ep-err" class="optin__error" hidden></div>
       <button class="btn btn--primary btn--block" id="ep-save" style="margin-top:16px;">${editingId ? 'Save changes' : 'Add EpiPen'}</button>
     </div>`;
   if (pen) {
     ov.querySelector('#ep-brand').value = pen.brand;
     ov.querySelector('#ep-dose').value = pen.dose;
-    ov.querySelector('#ep-exp').value = (pen.expiration_date || '').slice(0, 7);
+    ov.querySelector('#ep-exp').value = (pen.expiration_date || '').slice(0, 10);
   } else if (guess) {
-    // Pre-fill only the fields OCR is confident about; leave the rest blank.
+    // Pre-fill only the fields the scan is confident about; leave the rest blank.
     if (guess.brand) ov.querySelector('#ep-brand').value = guess.brand;
     if (guess.dose) ov.querySelector('#ep-dose').value = guess.dose;
-    if (guess.expiration) ov.querySelector('#ep-exp').value = guess.expiration;
+    // Vision returns a full YYYY-MM-DD; the OCR fallback may give YYYY-MM — expand
+    // that to the last day of the month so the date picker has a valid value.
+    if (guess.expiration) ov.querySelector('#ep-exp').value = toFullDate(guess.expiration);
   }
   ov.querySelector('#ep-fx').addEventListener('click', closeOverlay);
   ov.querySelector('#ep-save').addEventListener('click', savePen);
@@ -414,14 +427,9 @@ function openForm(pen, guess, scan) {
 async function savePen() {
   const brand = document.getElementById('ep-brand').value;
   const dose = document.getElementById('ep-dose').value;
-  const month = document.getElementById('ep-exp').value; // YYYY-MM
+  const expiration_date = document.getElementById('ep-exp').value; // YYYY-MM-DD
   const err = document.getElementById('ep-err');
-  if (!month) { err.textContent = 'Enter the expiration month.'; err.hidden = false; return; }
-
-  // Pens are good through the END of their printed month.
-  const [y, m] = month.split('-').map(Number);
-  const lastDay = new Date(y, m, 0).getDate();
-  const expiration_date = `${month}-${String(lastDay).padStart(2, '0')}`;
+  if (!expiration_date) { err.textContent = 'Enter the expiration date.'; err.hidden = false; return; }
 
   const btn = document.getElementById('ep-save');
   const t = btn.textContent;
