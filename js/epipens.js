@@ -9,6 +9,10 @@
 import { icons } from './icons.js';
 import { ocrImage, parseInjectorText } from './ocr.js';
 
+// Visible build tag so it's obvious which version is actually running (helps cut
+// through service-worker caching confusion). Bump alongside the sw.js cache.
+const BUILD = 26;
+
 let netP;
 const net = () => (netP ||= import('./net.js'));
 
@@ -35,7 +39,10 @@ export async function mountEpipens(el) {
   container = el;
   container.innerHTML = `
     <div class="card epipens">
-      <span class="eyebrow">My EpiPens</span>
+      <div class="epipens__head">
+        <span class="eyebrow">My EpiPens</span>
+        <span class="ep-build">build ${BUILD}</span>
+      </div>
       <div class="ep-list" id="ep-list"><div class="optin__note">Loading…</div></div>
       <button class="btn btn--secondary btn--block" id="ep-add" style="margin-top:12px;">
         ${icons.camera()} Scan an EpiPen
@@ -119,33 +126,37 @@ function openScanner() {
     </div>`;
   ov.querySelector('#ep-x').addEventListener('click', closeOverlay);
   ov.querySelector('#ep-manual').addEventListener('click', () => { stopCam(); openForm(null); });
-  ov.querySelector('#ep-capture').addEventListener('click', () => {
-    capturedPhoto = grabFrame(ov.querySelector('#ep-video'));
-    stopCam();
-    runScan();
-  });
+  ov.querySelector('#ep-capture').addEventListener('click', () => runScan(ov.querySelector('#ep-video')));
   startCam(ov.querySelector('#ep-video'));
 }
 
 // On-device OCR: read the label, then open the confirm form pre-filled with the
-// best guesses. Any failure (CDN down, unreadable label, timeout) just opens the
-// form blank — the user can always type it in. Either way they confirm.
-async function runScan() {
+// best guesses. The "Reading your pen…" state is shown IMMEDIATELY (before the
+// photo grab or OCR) so tapping Capture always gives instant feedback. Any
+// failure (unreadable label, engine won't load, timeout) just opens the form
+// blank — the user can always type it in. Either way they confirm.
+async function runScan(video) {
   const ov = overlay();
   ov.innerHTML = `
     <div class="ep-sheet ep-scanning">
       <div class="ep-spinner" aria-hidden="true"></div>
       <p class="ep-scanning__label">Reading your pen…</p>
+      <p class="ep-scanning__sub">First scan downloads the reader once — this can take a few seconds.</p>
       <button class="btn btn--ghost" id="ep-skip">Skip — enter manually</button>
     </div>`;
   let skipped = false;
   ov.querySelector('#ep-skip').addEventListener('click', () => { skipped = true; openForm(null); });
 
+  try { capturedPhoto = grabFrame(video); } catch (_) { capturedPhoto = null; }
+  stopCam();
+
   let guess = null;
-  try {
-    const text = await ocrImage(capturedPhoto);
-    guess = parseInjectorText(text);
-  } catch (_) { guess = null; }
+  if (capturedPhoto) {
+    try {
+      const text = await ocrImage(capturedPhoto);
+      guess = parseInjectorText(text);
+    } catch (_) { guess = null; }
+  }
   if (!skipped) openForm(null, guess);
 }
 

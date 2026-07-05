@@ -198,18 +198,31 @@ export async function enablePush() {
 
 export async function raiseAlert({ lat, lng, note }) {
   const user = await currentUser();
-  if (!user) throw new Error('SIGN_IN_REQUIRED');
-  const { data, error } = await supabase.from('alerts')
-    .insert({ created_by: user.id, lat, lng, patient_note: note || 'Possible anaphylaxis' })
-    .select().single();
+  // Client-generate the id so a NOT-signed-in ("anon") bystander can raise an
+  // alert without reading the row back — anon has no SELECT on alerts, so a
+  // patient's exact location is never exposed to other anonymous clients.
+  const id = self.crypto?.randomUUID ? self.crypto.randomUUID() : undefined;
+  const row = {
+    lat, lng,
+    patient_note: note || 'Possible anaphylaxis',
+    status: 'active',
+    created_by: user ? user.id : null, // null → anon path (allowed by RLS)
+  };
+  if (id) row.id = id;
+
+  const { error } = await supabase.from('alerts').insert(row);
   if (error) throw error;
+
+  const alert = { ...row, created_at: new Date().toISOString() };
   // Fan out web push to nearby available responders (server-side proximity).
+  // If this fails (e.g. anon can't invoke the function), the alert is still
+  // live and open-app responders receive it via realtime.
   try {
-    await supabase.functions.invoke('notify-responders', { body: { alert_id: data.id } });
+    await supabase.functions.invoke('notify-responders', { body: { alert_id: alert.id } });
   } catch (e) {
     console.warn('notify-responders failed (alert still live for open apps):', e);
   }
-  return data;
+  return alert;
 }
 
 export async function resolveAlert(id) {

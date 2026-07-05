@@ -867,3 +867,8 @@
   border-radius: var(--radius-sm); font-size: 13px; font-weight: 600;
 }
 .ep-form__note svg { width: 16px; height: 16px; flex: 0 0 auto; }
+
+/* EpiPens header + build tag + scanning sub-note */
+.epipens__head { display: flex; align-items: center; justify-content: space-between; }
+.ep-build { font-size: 11px; color: var(--color-gray-text); font-variant-numeric: tabular-nums; }
+.ep-scanning__sub { font-size: 12px; color: var(--color-gray-text); margin: -8px 0 16px; }

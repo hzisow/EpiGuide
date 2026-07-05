@@ -55,8 +55,8 @@ async function raise(container) {
     btn.removeAttribute('aria-disabled');
     btn.innerHTML = `${icons.bell()} Alert nearby volunteers`;
     const msg = (e && e.message) || String(e);
-    status.textContent = msg === 'SIGN_IN_REQUIRED'
-      ? 'Sign in on the Volunteer tab first, then send the alert.'
+    status.textContent = /denied|permission|location/i.test(msg)
+      ? 'Location needed to alert nearby volunteers. Allow location and try again.'
       : 'Could not send the alert. Check your connection and try again.';
   }
 }

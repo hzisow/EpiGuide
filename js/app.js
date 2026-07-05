@@ -171,7 +171,25 @@ function boot() {
 
   // Register the service worker (offline cache + push handling).
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js')
+      .then((reg) => {
+        reg.update();
+        // Check for a new deploy periodically while the app stays open.
+        setInterval(() => reg.update(), 60 * 60 * 1000);
+      })
+      .catch(() => {});
+
+    // AUTO-UPDATE: when a newly deployed service worker takes control, reload
+    // once so the page runs the fresh code (the new SW skipWaiting()s and
+    // claim()s). This ends the "I still see the old version" problem — no manual
+    // double-reload needed.
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    });
+
     // A push tap re-opens the app and posts the alert id here.
     navigator.serviceWorker.addEventListener('message', (ev) => {
       if (ev.data?.type === 'open-alert') routeToIncomingAlert(ev.data.alert_id);
