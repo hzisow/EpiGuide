@@ -205,10 +205,8 @@
 /* ============================================================
    Bottom tab nav
    ============================================================ */
-/* Floating glass pill, inset from the edges (iOS-style). Present on every
-   screen, including full-screen modals — nothing hides it. The "glass" is the
-   web-feasible Liquid Glass treatment: backdrop blur + saturation, a specular
-   top highlight, and a soft drop shadow. */
+/* Floating pill, inset from the edges (iOS-style). Present on every screen,
+   including full-screen modals — nothing hides it. */
 .tabbar {
   position: absolute;
   left: var(--space-4); right: var(--space-4);
@@ -218,13 +216,9 @@
   gap: var(--space-1);
   padding: 6px;
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.70);
-  -webkit-backdrop-filter: blur(18px) saturate(170%);
-  backdrop-filter: blur(18px) saturate(170%);
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  box-shadow:
-    0 8px 28px rgba(17, 24, 39, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  background: var(--color-white);
+  border: 1px solid var(--color-gray-divider);
+  box-shadow: 0 8px 28px rgba(17, 24, 39, 0.14);
 }
 .tabbar--visible { display: flex; }
 .tab {
