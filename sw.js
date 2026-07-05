@@ -4,7 +4,7 @@
 // offline / slow-connection fallback. MediaPipe/fonts CDNs are left to the
 // network (they degrade gracefully in the app).
 
-const CACHE = 'epiguide-v24';
+const CACHE = 'epiguide-v25';
 const ASSETS = [
   './',
   './index.html',
@@ -108,7 +108,16 @@ self.addEventListener('fetch', (e) => {
   // Only handle same-origin requests; let CDN/API requests hit the network.
   if (url.origin !== self.location.origin) return;
 
-  // NETWORK-FIRST for everything same-origin (HTML, JS, CSS, media). Online
+  // The vendored OCR assets (Tesseract engine + ~11 MB language data) are large
+  // and immutable, and would blow the network-first timeout below on a slow
+  // connection. Serve them CACHE-FIRST: download once on the first scan, then
+  // serve instantly (and offline) forever after.
+  if (url.pathname.includes('/vendor/tesseract/')) {
+    e.respondWith(cacheFirst(request));
+    return;
+  }
+
+  // NETWORK-FIRST for everything else same-origin (HTML, JS, CSS, media). Online
   // users always get the freshly deployed code — previously the app's JS/CSS
   // were served cache-first, so a new index.html would still load STALE modules
   // and the site appeared to never update. The cache is now purely an offline /
@@ -116,6 +125,15 @@ self.addEventListener('fetch', (e) => {
   // connectivity never blocks the UI (this is an emergency app).
   e.respondWith(networkFirst(request));
 });
+
+async function cacheFirst(request) {
+  const cache = await caches.open(CACHE);
+  const hit = await cache.match(request);
+  if (hit) return hit;
+  const res = await fetch(request);
+  if (res && res.status === 200) cache.put(request, res.clone());
+  return res;
+}
 
 async function networkFirst(request) {
   const cache = await caches.open(CACHE);

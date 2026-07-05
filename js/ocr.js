@@ -1,18 +1,41 @@
 // Fully-free, on-device OCR for the EpiPen scanner. Tesseract.js (WASM) runs
-// entirely in the browser — no server, no API key, no per-scan cost. It's loaded
-// lazily from a CDN only when someone actually scans, so the core emergency flow
-// is never affected. Accuracy on curved/glossy labels is imperfect by design,
-// which is exactly why the user always confirms the result before saving.
+// entirely in the browser — no server, no API key, no per-scan cost. The engine,
+// worker, WASM core, and English language data are SELF-HOSTED in
+// js/vendor/tesseract (loading them from a CDN proved unreliable — path
+// resolution for the worker/core kept failing). They're large (~18 MB the first
+// time), so they load lazily only when someone actually scans, and the service
+// worker caches them after first use (cache-first — see sw.js). Accuracy on
+// curved/glossy labels is imperfect by design: the user always confirms.
 
-const TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.esm.min.js';
+// Absolute base for the vendored assets — correct under any deploy path
+// (e.g. GitHub Pages /EpiGuide/) because it's derived from this module's URL.
+const VENDOR = new URL('./vendor/tesseract/', import.meta.url).href;
+
+let enginePromise = null;
+function loadEngine() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (enginePromise) return enginePromise;
+  enginePromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = VENDOR + 'tesseract.min.js';
+    s.onload = () => resolve(window.Tesseract);
+    s.onerror = () => { enginePromise = null; reject(new Error('Failed to load OCR engine')); };
+    document.head.appendChild(s);
+  });
+  return enginePromise;
+}
 
 // Run OCR on a data-URL image; returns the raw recognized text.
 // Throws on load failure or timeout — the caller falls back to manual entry.
-export async function ocrImage(dataUrl, { timeoutMs = 25000 } = {}) {
-  const mod = await import(TESSERACT_CDN);
-  const createWorker = mod.createWorker || mod.default?.createWorker;
-  if (!createWorker) throw new Error('OCR unavailable');
-  const worker = await createWorker('eng');
+// The timeout is generous because the first scan also downloads the ~18 MB of
+// engine + language data; later scans are fast (served from cache).
+export async function ocrImage(dataUrl, { timeoutMs = 45000 } = {}) {
+  const Tesseract = await loadEngine();
+  const worker = await Tesseract.createWorker('eng', 1, {
+    workerPath: VENDOR + 'worker.min.js',
+    corePath: VENDOR,
+    langPath: VENDOR + 'tessdata',
+  });
   try {
     const text = await Promise.race([
       worker.recognize(dataUrl).then((r) => r.data.text),
