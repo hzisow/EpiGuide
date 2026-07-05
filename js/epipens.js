@@ -11,7 +11,7 @@ import { ocrImage, parseInjectorText } from './ocr.js';
 
 // Visible build tag so it's obvious which version is actually running (helps cut
 // through service-worker caching confusion). Bump alongside the sw.js cache.
-const BUILD = 28;
+const BUILD = 29;
 
 let netP;
 const net = () => (netP ||= import('./net.js'));
@@ -201,33 +201,59 @@ function grabCanvas(video) {
 }
 
 // Turn a raw camera frame into something Tesseract can actually read: trim the
-// outer border (background/glare), upscale so characters are tall, convert to
-// grayscale, and stretch contrast. This is the single biggest free win for
-// real-world curved/glossy labels.
+// noisy border, upscale so characters are tall, then apply ADAPTIVE (local)
+// thresholding — clean black-text-on-white that survives the uneven glare and
+// shadow of a curved glossy label, where a single global contrast/threshold
+// fails. This is the biggest free win for real-world label OCR.
 function preprocessForOcr(srcCanvas) {
   const sw = srcCanvas.width, sh = srcCanvas.height;
   // Trim ~7% off each edge — keeps most of the (frame-filling) label, drops the
-  // noisy border where the cylinder curls away and the background shows.
+  // border where the cylinder curls away and the background shows.
   const mx = Math.round(sw * 0.07), my = Math.round(sh * 0.07);
   const cw = sw - mx * 2, ch = sh - my * 2;
   // Upscale so text is large (Tesseract wants ~30px-tall glyphs). Target ~1500px.
   const scale = Math.min(3, Math.max(1, 1500 / cw));
+  const W = Math.round(cw * scale), H = Math.round(ch * scale);
   const out = document.createElement('canvas');
-  out.width = Math.round(cw * scale);
-  out.height = Math.round(ch * scale);
+  out.width = W; out.height = H;
   const ctx = out.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(srcCanvas, mx, my, cw, ch, 0, 0, out.width, out.height);
-  // Grayscale + contrast stretch around mid-gray.
-  const img = ctx.getImageData(0, 0, out.width, out.height);
+  ctx.drawImage(srcCanvas, mx, my, cw, ch, 0, 0, W, H);
+
+  const img = ctx.getImageData(0, 0, W, H);
   const d = img.data;
-  const contrast = 1.7;
-  for (let i = 0; i < d.length; i += 4) {
-    let g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-    g = (g - 128) * contrast + 128;
-    g = g < 0 ? 0 : g > 255 ? 255 : g;
-    d[i] = d[i + 1] = d[i + 2] = g;
+  const N = W * H;
+  const gray = new Float32Array(N);
+  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+    gray[p] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+  }
+  // Integral image for O(1) window sums (Bradley & Roth adaptive threshold).
+  const IW = W + 1;
+  const integ = new Float64Array(IW * (H + 1));
+  for (let y = 0; y < H; y++) {
+    let rowsum = 0;
+    for (let x = 0; x < W; x++) {
+      rowsum += gray[y * W + x];
+      integ[(y + 1) * IW + (x + 1)] = integ[y * IW + (x + 1)] + rowsum;
+    }
+  }
+  const s = Math.max(8, Math.floor(W / 16)); // window ≈ 1/16 of width
+  const half = Math.floor(s / 2);
+  const T = 0.15;                            // text if ~15% darker than local mean
+  for (let y = 0; y < H; y++) {
+    const y1 = Math.max(0, y - half), y2 = Math.min(H - 1, y + half);
+    for (let x = 0; x < W; x++) {
+      const x1 = Math.max(0, x - half), x2 = Math.min(W - 1, x + half);
+      const count = (x2 - x1 + 1) * (y2 - y1 + 1);
+      const sum = integ[(y2 + 1) * IW + (x2 + 1)] - integ[y1 * IW + (x2 + 1)]
+                - integ[(y2 + 1) * IW + x1] + integ[y1 * IW + x1];
+      const p = y * W + x;
+      const val = (gray[p] * count <= sum * (1 - T)) ? 0 : 255;
+      const di = p * 4;
+      d[di] = d[di + 1] = d[di + 2] = val;
+      d[di + 3] = 255;
+    }
   }
   ctx.putImageData(img, 0, 0);
   return out.toDataURL('image/png');
