@@ -833,7 +833,14 @@
   border: 2px dashed rgba(255,255,255,0.85); border-radius: var(--radius-md);
   pointer-events: none;
 }
-.ep-scan__hint { margin: 14px 2px 0; font-size: 13px; color: var(--color-gray-text); text-align: center; }
+.ep-scan__tip {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin: 14px 0 0; padding: 10px 12px;
+  background: rgba(240,140,0,0.12); color: #B25B00;
+  border-radius: var(--radius-sm); font-size: 13px; line-height: 1.4;
+}
+.ep-scan__tip svg { width: 18px; height: 18px; flex: 0 0 auto; margin-top: 1px; }
+.ep-scan__hint { margin: 10px 2px 0; font-size: 13px; color: var(--color-gray-text); text-align: center; }
 .ep-scan__actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
 .ep-scan__actions .btn--primary { flex: 1; }
 

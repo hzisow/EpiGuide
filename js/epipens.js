@@ -110,7 +110,8 @@ function openScanner() {
         <video id="ep-video" playsinline muted autoplay></video>
         <div class="ep-scan__frame"></div>
       </div>
-      <p class="ep-scan__hint">Point at your auto-injector's label, then capture. You'll confirm the details next.</p>
+      <div class="ep-scan__tip">${icons.alertTriangle()}<span>Slide the pen out of its case or tube so the label on the pen itself — <strong>brand, dose, and expiration date</strong> — is fully visible.</span></div>
+      <p class="ep-scan__hint">Fill the frame with the label, then capture. You'll confirm the details next.</p>
       <div class="ep-scan__actions">
         <button class="btn btn--ghost" id="ep-manual">Enter manually</button>
         <button class="btn btn--primary" id="ep-capture">${icons.camera()} Capture</button>
