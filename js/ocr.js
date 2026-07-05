@@ -29,12 +29,13 @@ function loadEngine() {
 // Throws on load failure or timeout — the caller falls back to manual entry.
 // The timeout is generous because the first scan also downloads the ~18 MB of
 // engine + language data; later scans are fast (served from cache).
-export async function ocrImage(dataUrl, { timeoutMs = 45000 } = {}) {
+export async function ocrImage(dataUrl, { timeoutMs = 45000, onProgress } = {}) {
   const Tesseract = await loadEngine();
   const worker = await Tesseract.createWorker('eng', 1, {
     workerPath: VENDOR + 'worker.min.js',
     corePath: VENDOR,
     langPath: VENDOR + 'tessdata',
+    logger: onProgress ? (m) => { try { onProgress(m); } catch (_) {} } : undefined,
   });
   try {
     const text = await Promise.race([

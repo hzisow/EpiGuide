@@ -11,7 +11,7 @@ import { ocrImage, parseInjectorText } from './ocr.js';
 
 // Visible build tag so it's obvious which version is actually running (helps cut
 // through service-worker caching confusion). Bump alongside the sw.js cache.
-const BUILD = 26;
+const BUILD = 27;
 
 let netP;
 const net = () => (netP ||= import('./net.js'));
@@ -141,7 +141,7 @@ async function runScan(video) {
     <div class="ep-sheet ep-scanning">
       <div class="ep-spinner" aria-hidden="true"></div>
       <p class="ep-scanning__label">Reading your pen…</p>
-      <p class="ep-scanning__sub">First scan downloads the reader once — this can take a few seconds.</p>
+      <p class="ep-scanning__sub" id="ep-scan-status">First scan downloads the reader once — this can take a few seconds.</p>
       <button class="btn btn--ghost" id="ep-skip">Skip — enter manually</button>
     </div>`;
   let skipped = false;
@@ -150,14 +150,27 @@ async function runScan(video) {
   try { capturedPhoto = grabFrame(video); } catch (_) { capturedPhoto = null; }
   stopCam();
 
-  let guess = null;
+  let guess = null, rawText = '', ocrError = null;
   if (capturedPhoto) {
     try {
-      const text = await ocrImage(capturedPhoto);
-      guess = parseInjectorText(text);
-    } catch (_) { guess = null; }
+      rawText = await ocrImage(capturedPhoto, {
+        onProgress: (m) => {
+          const el = document.getElementById('ep-scan-status');
+          if (!el || !m) return;
+          const pct = (typeof m.progress === 'number') ? ` ${Math.round(m.progress * 100)}%` : '';
+          el.textContent = `${m.status || 'working'}${pct}`;
+        },
+      });
+      guess = parseInjectorText(rawText);
+    } catch (e) { ocrError = (e && e.message) || String(e); }
+  } else {
+    ocrError = 'Could not capture a photo from the camera.';
   }
-  if (!skipped) openForm(null, guess);
+  if (!skipped) openForm(null, guess, { rawText, ocrError });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
 async function startCam(video) {
@@ -184,7 +197,7 @@ function grabFrame(video) {
 
 // --- confirm / edit form --------------------------------------------------
 
-function openForm(pen, guess) {
+function openForm(pen, guess, scan) {
   editingId = pen?.id || null;
   const ov = overlay();
   const brandOpts = BRANDS.map((b) => `<option value="${b.v}">${b.label}</option>`).join('');
@@ -196,11 +209,25 @@ function openForm(pen, guess) {
   const note = scanned
     ? `<p class="ep-form__note">${icons.camera()} Scanned from your photo — please double-check before saving.</p>`
     : '';
+  // Diagnostic line so a failed/weak scan is visible (what it read, or the error)
+  // rather than a silent empty form.
+  let diag = '';
+  if (scan) {
+    if (scan.ocrError) {
+      diag = `<p class="ep-form__diag ep-form__diag--err">Scan error: ${escapeHtml(scan.ocrError)}</p>`;
+    } else {
+      const clean = (scan.rawText || '').replace(/\s+/g, ' ').trim();
+      diag = clean
+        ? `<p class="ep-form__diag">Scan read: “${escapeHtml(clean.slice(0, 90))}”${scanned ? '' : ' — couldn’t match brand/dose/date, please fill in below.'}</p>`
+        : `<p class="ep-form__diag">Couldn’t read the label — enter the details below.</p>`;
+    }
+  }
   ov.innerHTML = `
     <div class="ep-sheet ep-form">
       <button class="ep-close" id="ep-fx" aria-label="Cancel">✕</button>
       <h2 class="h2">${heading}</h2>
       ${note}
+      ${diag}
       ${photo}
       <div class="field"><label for="ep-brand">Brand</label><select id="ep-brand">${brandOpts}</select></div>
       <div class="field" style="margin-top:12px;"><label for="ep-dose">Dose</label><select id="ep-dose">${doseOpts}</select></div>

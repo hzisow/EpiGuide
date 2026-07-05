@@ -872,3 +872,7 @@
 .epipens__head { display: flex; align-items: center; justify-content: space-between; }
 .ep-build { font-size: 11px; color: var(--color-gray-text); font-variant-numeric: tabular-nums; }
 .ep-scanning__sub { font-size: 12px; color: var(--color-gray-text); margin: -8px 0 16px; }
+
+/* EpiPen scan diagnostic line (shows what OCR read, or the error) */
+.ep-form__diag { font-size: 12px; line-height: 1.4; color: var(--color-gray-text); margin: 0 0 12px; word-break: break-word; }
+.ep-form__diag--err { color: var(--color-red-dark); font-weight: 600; }
