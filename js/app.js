@@ -1,6 +1,6 @@
 // Global state + screen router. No framework, no build step — plain ES modules.
 
-import { initFind } from './screens/find.js';
+import { initFind, teardownFind } from './screens/find.js';
 import { initRecognize, teardownRecognize } from './screens/recognize.js';
 import { initGuide } from './screens/guide.js';
 import { initDispatch, teardownDispatch } from './screens/dispatch.js';
@@ -47,10 +47,14 @@ const initializers = {
 // they depend on live state (timestamps, checked items, current step).
 const ALWAYS_REINIT = new Set([
   'guide', 'dispatch', 'checklist', 'medicHandoff', 'firstResponderView',
+  // find is cheap to re-init: it only re-raises the location modal flag if the
+  // modal is still pending (the map mounts once and stays).
+  'find',
 ]);
 
 // Teardown hooks (release camera, stop intervals) when leaving a screen.
 const teardowns = {
+  find: teardownFind,
   recognize: teardownRecognize,
   dispatch: teardownDispatch,
 };

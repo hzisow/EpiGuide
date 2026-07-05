@@ -14,11 +14,25 @@ const FALLBACK = { lat: 37.7793, lng: -122.4193 };
 
 let root, mapEl, topCard, bottomCard, prePrompt;
 let built = false;
+let rendered = false; // map + cards mounted (don't remount on every tab visit)
 
 export function initFind() {
   root = document.querySelector('.screen[data-screen="find"]');
   if (!built) build();
-  if (state.location) render();
+  if (state.location) {
+    if (!rendered) render();
+  } else if (prePrompt && !prePrompt.hidden) {
+    // Coming back with the location modal still pending: re-hide the tab bar
+    // (teardownFind cleared the flag when we left).
+    document.getElementById('app').classList.add('epi-modal');
+  }
+}
+
+// Leaving Find while the location modal is up must not leave the tab bar
+// hidden on other screens — e.g. landing on Volunteer after the Google
+// sign-in redirect, where the modal's epi-modal flag used to stick around.
+export function teardownFind() {
+  document.getElementById('app').classList.remove('epi-modal');
 }
 
 function build() {
@@ -91,6 +105,7 @@ function useLocation(coords, { demo }) {
 }
 
 function render() {
+  rendered = true;
   const nearest = state.cabinets[0];
   // Real, interactive Google map centered on and pinned at the nearest cabinet.
   mountMap(mapEl, nearest.lat, nearest.lng, { zoom: 16, interactive: true });
