@@ -10,10 +10,6 @@
 import { icons } from './icons.js';
 import { recognizeVariants, parseInjectorText, mergeGuesses } from './ocr.js';
 
-// Visible build tag so it's obvious which version is actually running (helps cut
-// through service-worker caching confusion). Bump alongside the sw.js cache.
-const BUILD = 33;
-
 let netP;
 const net = () => (netP ||= import('./net.js'));
 
@@ -42,7 +38,6 @@ export async function mountEpipens(el) {
     <div class="card epipens">
       <div class="epipens__head">
         <span class="eyebrow">My EpiPens</span>
-        <span class="ep-build">build ${BUILD}</span>
       </div>
       <div class="ep-list" id="ep-list"><div class="optin__note">Loading…</div></div>
       <button class="btn btn--secondary btn--block" id="ep-add" style="margin-top:12px;">
@@ -169,7 +164,7 @@ async function runScan(video) {
   stopCam();
 
   if (!canvas) {
-    if (!skipped) openForm(null, null, { ocrError: 'Could not capture a photo from the camera.' });
+    if (!skipped) openForm(null);
     return;
   }
 
@@ -184,11 +179,11 @@ async function runScan(video) {
       return;
     }
     // Vision returned nothing legible — try the on-device fallback before giving up.
-    if (!skipped) await runOcrFallback(canvas, skipped, 'The label was hard to read.');
+    if (!skipped) await runOcrFallback(canvas, skipped);
     return;
   } catch (e) {
     // Vision unavailable (offline / not signed in / not configured) — fall back.
-    if (!skipped) await runOcrFallback(canvas, skipped, null, (e && e.message) || String(e));
+    if (!skipped) await runOcrFallback(canvas, skipped, (e && e.message) || String(e));
   }
 }
 
@@ -199,7 +194,7 @@ function setScanStatus(text) {
 
 // On-device Tesseract fallback. Only reached when Claude Vision can't run or
 // returns nothing — keeps the scanner working offline / signed-out.
-async function runOcrFallback(canvas, skipped, softNote, visionError) {
+async function runOcrFallback(canvas, skipped, visionError) {
   setScanStatus('Reading on-device…');
   let variants = null;
   try {
@@ -212,7 +207,7 @@ async function runOcrFallback(canvas, skipped, softNote, visionError) {
     ];
   } catch (_) { variants = null; }
 
-  let guess = null, rawText = '', ocrError = null;
+  let guess = null;
   if (variants) {
     try {
       const texts = await recognizeVariants(variants, {
@@ -225,13 +220,10 @@ async function runOcrFallback(canvas, skipped, softNote, visionError) {
       const perPass = texts.map(parseInjectorText);
       const combined = parseInjectorText(texts.join('\n'));
       guess = mergeGuesses([...perPass, combined]);
-      rawText = texts.map((t) => (t || '').replace(/\s+/g, ' ').trim()).filter(Boolean).join('  ·  ');
-    } catch (e) { ocrError = (e && e.message) || String(e); }
-  } else {
-    ocrError = 'Could not process the photo.';
+    } catch (_) { /* leave guess null → user enters manually */ }
   }
   if (skipped) return;
-  openForm(null, guess, { rawText, ocrError, source: 'ocr', softNote, visionError });
+  openForm(null, guess, { source: 'ocr', visionError });
 }
 
 // Downscale a full-res frame to a JPEG small enough to upload quickly and keep
@@ -249,10 +241,6 @@ function toScanJpeg(srcCanvas, maxEdge = 1100) {
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(srcCanvas, 0, 0, out.width, out.height);
   return out.toDataURL('image/jpeg', 0.85);
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
 async function startCam(video) {
@@ -376,33 +364,14 @@ function openForm(pen, guess, scan) {
   const note = scanned
     ? `<p class="ep-form__note">${icons.camera()} Scanned from your photo — please double-check before saving.</p>`
     : '';
-  // Diagnostic line so a weak/failed scan is visible rather than a silent empty
-  // form. Claude Vision (source: 'vision') doesn't return raw text, so we only
-  // show a note when it couldn't fill anything in; the OCR fallback still shows
-  // what it read to aid debugging on real labels.
+  // When a scan ran but couldn't confidently fill the fields, prompt manual
+  // entry with a clean hint (nudging sign-in if that's what blocked the reader).
   let diag = '';
-  if (scan) {
-    if (scan.source === 'vision') {
-      if (!scanned) {
-        diag = `<p class="ep-form__diag">Couldn’t read the label clearly — enter the details below.</p>`;
-      }
-    } else {
-      const bits = [];
-      // If the AI reader was tried and failed, show WHY (e.g. "Sign in to use the
-      // camera reader", or an HTTP error) so the fallback isn't a silent mystery.
-      if (scan.visionError) {
-        bits.push(`<p class="ep-form__diag ep-form__diag--err">Camera reader: ${escapeHtml(scan.visionError)}</p>`);
-      }
-      if (scan.ocrError) {
-        bits.push(`<p class="ep-form__diag ep-form__diag--err">Scan error: ${escapeHtml(scan.ocrError)}</p>`);
-      } else {
-        const clean = (scan.rawText || '').replace(/\s+/g, ' ').trim();
-        bits.push(clean
-          ? `<p class="ep-form__diag">Scan read: “${escapeHtml(clean.slice(0, 90))}”${scanned ? '' : ' — couldn’t match brand/dose/date, please fill in below.'}</p>`
-          : `<p class="ep-form__diag">Couldn’t read the label — enter the details below.</p>`);
-      }
-      diag = bits.join('');
-    }
+  if (scan && !scanned) {
+    const needsSignIn = scan.visionError && /sign in/i.test(scan.visionError);
+    diag = needsSignIn
+      ? `<p class="ep-form__diag">Sign in to auto-scan, or enter the details below.</p>`
+      : `<p class="ep-form__diag">Couldn’t read the label — enter the details below.</p>`;
   }
   ov.innerHTML = `
     <div class="ep-sheet ep-form">

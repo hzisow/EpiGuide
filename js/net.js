@@ -117,22 +117,7 @@ export async function scanEpipen(imageDataUrl) {
   const { data, error } = await supabase.functions.invoke('scan-epipen', {
     body: { image_base64, media_type },
   });
-  if (error) {
-    // Supabase returns a FunctionsHttpError with the function's non-2xx body in
-    // error.context (not in `data`). Pull the real message out so a failure is
-    // diagnosable on-screen instead of a generic throw.
-    let detail = (error && error.message) || 'Vision request failed';
-    try {
-      const bodyText = await error.context?.text?.();
-      if (bodyText) {
-        const b = JSON.parse(bodyText);
-        if (b?.error) detail = b.error
-          + (b.status ? ` (HTTP ${b.status})` : '')
-          + (b.detail ? ` — ${b.detail}` : '');
-      }
-    } catch (_) {}
-    throw new Error(detail);
-  }
+  if (error) throw error;
   if (data && data.error) throw new Error(data.error);
   return {
     brand: data?.brand ?? null,
