@@ -1,8 +1,9 @@
 // "My EpiPens" — a per-user auto-injector inventory on the Volunteer screen.
-// Capture a pen with the camera (a framing aid today; EasyOCR auto-fill lands in
-// Phase 2), confirm brand / dose / expiration, and see an "expires in X"
-// countdown that warns as it nears. Saving a pen also syncs the responder's
-// availability profile (what they carry) so a patient sees accurate info.
+// Capture a pen with the camera — Claude Vision reads the label (brand / dose /
+// expiration) server-side, with on-device Tesseract as an offline fallback — then
+// the user confirms, and sees an "expires in X" countdown that warns as it nears.
+// Saving a pen also syncs the responder's availability profile (what they carry)
+// so a patient sees accurate info.
 //
 // net.js (Supabase) is imported lazily so the core app still works offline.
 
@@ -11,7 +12,7 @@ import { recognizeVariants, parseInjectorText, mergeGuesses } from './ocr.js';
 
 // Visible build tag so it's obvious which version is actually running (helps cut
 // through service-worker caching confusion). Bump alongside the sw.js cache.
-const BUILD = 30;
+const BUILD = 31;
 
 let netP;
 const net = () => (netP ||= import('./net.js'));
@@ -130,60 +131,113 @@ function openScanner() {
   startCam(ov.querySelector('#ep-video'));
 }
 
-// On-device OCR: read the label, then open the confirm form pre-filled with the
-// best guesses. The "Reading your pen…" state is shown IMMEDIATELY (before the
-// photo grab or OCR) so tapping Capture always gives instant feedback. Any
-// failure (unreadable label, engine won't load, timeout) just opens the form
-// blank — the user can always type it in. Either way they confirm.
+// Read the label, then open the confirm form pre-filled with the best guesses.
+// PRIMARY reader is Claude Vision (server-side scan-epipen function) — far more
+// accurate on curved/glossy labels than on-device OCR. If that fails (offline,
+// not signed in, or the scanner isn't configured) we fall back to Tesseract so
+// the feature still degrades gracefully. Either way the user confirms, so a
+// wrong read is harmless. The "Reading your pen…" state shows IMMEDIATELY so
+// tapping Capture always gives instant feedback.
 async function runScan(video) {
   const ov = overlay();
   ov.innerHTML = `
     <div class="ep-sheet ep-scanning">
       <div class="ep-spinner" aria-hidden="true"></div>
       <p class="ep-scanning__label">Reading your pen…</p>
-      <p class="ep-scanning__sub" id="ep-scan-status">First scan downloads the reader once — this can take a few seconds.</p>
+      <p class="ep-scanning__sub" id="ep-scan-status">Checking the label…</p>
       <button class="btn btn--ghost" id="ep-skip">Skip — enter manually</button>
     </div>`;
   let skipped = false;
   ov.querySelector('#ep-skip').addEventListener('click', () => { skipped = true; openForm(null); });
 
+  let canvas = null;
+  try {
+    canvas = grabCanvas(video);
+    capturedPhoto = canvas.toDataURL('image/jpeg', 0.85); // full frame, for preview
+  } catch (_) { capturedPhoto = null; }
+  stopCam();
+
+  if (!canvas) {
+    if (!skipped) openForm(null, null, { ocrError: 'Could not capture a photo from the camera.' });
+    return;
+  }
+
+  // 1) Claude Vision (primary).
+  try {
+    setScanStatus('Reading the label…');
+    const n = await net();
+    const scanJpeg = toScanJpeg(canvas); // downscaled to keep the upload/cost small
+    const guess = await n.scanEpipen(scanJpeg);
+    if (guess && (guess.brand || guess.dose || guess.expiration)) {
+      if (!skipped) openForm(null, guess, { source: 'vision' });
+      return;
+    }
+    // Vision returned nothing legible — try the on-device fallback before giving up.
+    if (!skipped) await runOcrFallback(canvas, skipped, 'The label was hard to read.');
+    return;
+  } catch (e) {
+    // Vision unavailable (offline / not signed in / not configured) — fall back.
+    if (!skipped) await runOcrFallback(canvas, skipped, null, (e && e.message) || String(e));
+  }
+}
+
+function setScanStatus(text) {
+  const el = document.getElementById('ep-scan-status');
+  if (el) el.textContent = text;
+}
+
+// On-device Tesseract fallback. Only reached when Claude Vision can't run or
+// returns nothing — keeps the scanner working offline / signed-out.
+async function runOcrFallback(canvas, skipped, softNote, visionError) {
+  setScanStatus('Reading on-device…');
   let variants = null;
   try {
-    const canvas = grabCanvas(video);
-    capturedPhoto = canvas.toDataURL('image/jpeg', 0.85); // full frame, for preview
     const thresh = preprocessForOcr(canvas, 'threshold');
     const contrast = preprocessForOcr(canvas, 'contrast');
-    // Multiple passes (different cleanup + segmentation) — merged field-by-field.
     variants = [
       { url: thresh, psm: 6 },    // threshold, single block
       { url: thresh, psm: 11 },   // threshold, sparse text
       { url: contrast, psm: 6 },  // contrast, single block
     ];
-  } catch (_) { capturedPhoto = null; variants = null; }
-  stopCam();
+  } catch (_) { variants = null; }
 
   let guess = null, rawText = '', ocrError = null;
   if (variants) {
     try {
       const texts = await recognizeVariants(variants, {
         onProgress: (m) => {
-          const el = document.getElementById('ep-scan-status');
-          if (!el || !m) return;
+          if (!m) return;
           const pct = (typeof m.progress === 'number') ? ` ${Math.round(m.progress * 100)}%` : '';
-          el.textContent = `${m.status || 'working'}${pct}`;
+          setScanStatus(`${m.status || 'working'}${pct}`);
         },
       });
-      // Merge per-pass guesses, then fall back to parsing all text together for
-      // anything still missing (e.g. month in one pass, year in another).
       const perPass = texts.map(parseInjectorText);
       const combined = parseInjectorText(texts.join('\n'));
       guess = mergeGuesses([...perPass, combined]);
       rawText = texts.map((t) => (t || '').replace(/\s+/g, ' ').trim()).filter(Boolean).join('  ·  ');
     } catch (e) { ocrError = (e && e.message) || String(e); }
   } else {
-    ocrError = 'Could not capture a photo from the camera.';
+    ocrError = 'Could not process the photo.';
   }
-  if (!skipped) openForm(null, guess, { rawText, ocrError });
+  if (skipped) return;
+  openForm(null, guess, { rawText, ocrError, source: 'ocr', softNote, visionError });
+}
+
+// Downscale a full-res frame to a JPEG small enough to upload quickly and keep
+// Claude Vision's per-scan cost tiny (~1000px long edge ≈ a few hundred image
+// tokens), while staying sharp enough to read the label text.
+function toScanJpeg(srcCanvas, maxEdge = 1100) {
+  const { width: w, height: h } = srcCanvas;
+  const scale = Math.min(1, maxEdge / Math.max(w, h));
+  if (scale >= 1) return srcCanvas.toDataURL('image/jpeg', 0.85);
+  const out = document.createElement('canvas');
+  out.width = Math.round(w * scale);
+  out.height = Math.round(h * scale);
+  const ctx = out.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(srcCanvas, 0, 0, out.width, out.height);
+  return out.toDataURL('image/jpeg', 0.85);
 }
 
 function escapeHtml(s) {
@@ -311,11 +365,17 @@ function openForm(pen, guess, scan) {
   const note = scanned
     ? `<p class="ep-form__note">${icons.camera()} Scanned from your photo — please double-check before saving.</p>`
     : '';
-  // Diagnostic line so a failed/weak scan is visible (what it read, or the error)
-  // rather than a silent empty form.
+  // Diagnostic line so a weak/failed scan is visible rather than a silent empty
+  // form. Claude Vision (source: 'vision') doesn't return raw text, so we only
+  // show a note when it couldn't fill anything in; the OCR fallback still shows
+  // what it read to aid debugging on real labels.
   let diag = '';
   if (scan) {
-    if (scan.ocrError) {
+    if (scan.source === 'vision') {
+      if (!scanned) {
+        diag = `<p class="ep-form__diag">Couldn’t read the label clearly — enter the details below.</p>`;
+      }
+    } else if (scan.ocrError) {
       diag = `<p class="ep-form__diag ep-form__diag--err">Scan error: ${escapeHtml(scan.ocrError)}</p>`;
     } else {
       const clean = (scan.rawText || '').replace(/\s+/g, ' ').trim();

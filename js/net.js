@@ -98,6 +98,30 @@ export async function saveProfile({ display_name, injector_type, dose }) {
 }
 
 // ---------------------------------------------------------------------------
+// EpiPen label reading (Claude Vision, via the scan-epipen Edge Function)
+// ---------------------------------------------------------------------------
+
+// Sends the captured label photo to the server-side scanner (which holds the
+// Anthropic key) and returns a best-guess { brand, dose, expiration }. Throws on
+// any failure so the caller can fall back to on-device OCR. `imageDataUrl` is a
+// data: URL from a <canvas>; media_type is derived from it.
+export async function scanEpipen(imageDataUrl) {
+  const m = /^data:([^;]+);base64,/.exec(imageDataUrl || '');
+  const media_type = m ? m[1] : 'image/jpeg';
+  const image_base64 = (imageDataUrl || '').replace(/^data:[^;]+;base64,/, '');
+  const { data, error } = await supabase.functions.invoke('scan-epipen', {
+    body: { image_base64, media_type },
+  });
+  if (error) throw error;
+  if (data && data.error) throw new Error(data.error);
+  return {
+    brand: data?.brand ?? null,
+    dose: data?.dose ?? null,
+    expiration: data?.expiration ?? null,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // EpiPen inventory (per-user, owner-only via RLS)
 // ---------------------------------------------------------------------------
 
