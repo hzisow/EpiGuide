@@ -49,6 +49,10 @@
 .btn--on-red { background: var(--color-white); color: var(--color-red-dark); }
 .btn--on-red:active { transform: scale(0.98); background: #f3f3f3; }
 
+/* Emergency call action — strongest red, for the real tel:911 button. */
+.btn--danger { background: var(--color-red); color: var(--color-white); font-weight: 700; }
+.btn--danger:active { transform: scale(0.98); background: var(--color-red-dark); }
+
 .btn:disabled,
 .btn[aria-disabled="true"] {
   opacity: 0.4;

@@ -16,6 +16,7 @@ export const icons = {
   clock: (cls) => svg('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', cls),
   user: (cls) => svg('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>', cls),
   ambulance: (cls) => svg('<path d="M8 19a2 2 0 1 1-4 0"/><path d="M20 19a2 2 0 1 1-4 0"/><path d="M2 8h11v9H2z"/><path d="M13 11h4l3 3v3h-2"/><path d="M6 5v3M4.5 6.5h3"/>', cls),
+  phone: (cls) => svg('<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z"/>', cls),
   route: (cls) => svg('<circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h6a4 4 0 0 0 0-8H10a4 4 0 0 1 0-8h6"/>', cls),
   replay: (cls) => svg('<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>', cls),
   chevronLeft: (cls) => svg('<polyline points="15 18 9 12 15 6"/>', cls),

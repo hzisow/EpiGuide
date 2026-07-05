@@ -421,43 +421,37 @@
    Screen 4 — Dispatch
    ============================================================ */
 .dispatch { background: var(--color-gray-bg); }
-.dispatch__banner {
-  margin: max(var(--space-4), env(safe-area-inset-top)) var(--space-4) var(--space-4);
-  background: var(--color-red);
-  color: #fff;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  padding: var(--space-5);
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
+.dispatch__call {
+  padding: max(var(--space-4), env(safe-area-inset-top)) var(--space-4) var(--space-3);
 }
-.dispatch__banner .check-circle {
-  flex: 0 0 auto;
-  width: 44px; height: 44px;
-  display: grid; place-items: center;
-  background: rgba(255,255,255,0.2);
-  border-radius: 50%;
+.dispatch__call-btn { height: 60px; font-size: 20px; box-shadow: var(--shadow-card); }
+.dispatch__call-btn .icon { width: 24px; height: 24px; margin-right: 6px; }
+.dispatch__call-note {
+  margin: var(--space-2) 2px 0;
+  font-size: 12px;
+  color: var(--color-gray-text);
+  text-align: center;
 }
 .dispatch__map {
   position: relative;
-  height: 200px;
+  height: 180px;
   margin: 0 var(--space-4);
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-card);
 }
-.dispatch__map .badge-glass {
-  position: absolute; top: var(--space-3); right: var(--space-3); z-index: 6;
-}
-.dispatch__body { padding: var(--space-4); }
-.reported-row {
-  display: flex; align-items: center; gap: var(--space-3);
+.dispatch__body { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
+.script-row {
+  display: flex; align-items: flex-start; gap: var(--space-3);
   padding: var(--space-3) 0;
   border-bottom: 1px solid var(--color-gray-divider);
+  font-size: 15px; line-height: 1.4;
 }
-.reported-row:last-child { border-bottom: none; }
-.reported-row .icon { color: var(--color-green); width: 22px; height: 22px; flex: 0 0 auto; }
+.script-row:last-child { border-bottom: none; }
+.script-row .icon { color: var(--color-red-dark); width: 20px; height: 20px; flex: 0 0 auto; margin-top: 1px; }
+.script-row a { color: var(--color-blue); font-weight: 600; }
+.script-row em { color: var(--color-gray-text); font-style: normal; }
+.dispatch__body .card > .eyebrow { display: block; margin-bottom: var(--space-2); }
 .stopwatch {
   text-align: center;
   padding: var(--space-5) 0 var(--space-2);
@@ -742,7 +736,7 @@
 .scroll-y, .optin__body { min-height: 0; }
 
 /* Fixed chrome must keep its size while the scroll region absorbs overflow. */
-.dispatch__banner, .dispatch__map,
+.dispatch__call, .dispatch__map,
 .checklist__head, .medic__bar, .medic__foot,
 .guide__head, .guide__foot,
 .optin__head, .fresponder__strip, .fresponder__foot { flex: 0 0 auto; }

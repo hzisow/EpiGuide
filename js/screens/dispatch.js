@@ -1,9 +1,19 @@
-// Screen 4 — Dispatch. Post-injection state: SIMULATED emergency dispatch UI
-// plus a REAL elapsed-time stopwatch computed from state.dispatch.epinephrineGivenAt.
+// Screen 4 — Dispatch. Post-injection state. Everything here is now REAL:
 //
-// SIMULATION BOUNDARY: nothing on this screen contacts real emergency services.
-// The "911 has been called" banner, the ambulance, and the ETA are UI theater
-// only — never wire them to a phone call, SMS, or any dispatch API. No exceptions.
+//  • "Call 911" is a real tel:911 link. Tapping it opens the native dialer with
+//    911 pre-filled; the user confirms the call and speaks to the dispatcher.
+//    A web app cannot (and must not) place the call silently — human-in-the-loop
+//    is deliberate: 911 needs a person on the line, and the browser can't hand
+//    the dispatcher a location the way a carrier 911 call does.
+//  • The dispatcher script is filled from REAL data: the device's GPS location
+//    and the REAL epinephrine timestamp captured when Guide step 6 completed.
+//  • "Share status" opens the native share sheet / SMS with a pre-filled message
+//    (live location + status) the user sends to a contact. Also user-confirmed.
+//  • The elapsed-time stopwatch is real.
+//
+// The old fake "911 has been called" banner, the moving ambulance, and the
+// invented ETA countdown have been removed — the app never claims something
+// happened that didn't.
 
 import { state, navigate } from '../app.js';
 import { icons } from '../icons.js';
@@ -12,8 +22,6 @@ import { mountVolunteerCard } from '../volunteerCard.js';
 
 let root, built = false;
 let stopwatchTimer = null;
-let ambulanceTimer = null;
-let etaTimer = null;
 let mapEl;
 let volTeardown = null;
 
@@ -22,41 +30,43 @@ export function initDispatch() {
   if (!built) build();
   render();
   startStopwatch();
-  startSimulations();
   // Live volunteer status. The alert itself is raised from the Find screen;
   // if one is active this shows responders, otherwise it offers the button.
   volTeardown = mountVolunteerCard(root.querySelector('#disp-vol'), {
-    lead: 'Alert people nearby who carry an EpiPen — separate from the 911 call above.',
+    lead: 'No pen nearby? Alert people close by who carry an EpiPen — separate from your 911 call.',
   });
 }
 
 export function teardownDispatch() {
   clearInterval(stopwatchTimer); stopwatchTimer = null;
-  clearInterval(ambulanceTimer); ambulanceTimer = null;
-  clearInterval(etaTimer); etaTimer = null;
   if (volTeardown) { volTeardown(); volTeardown = null; }
 }
 
 function build() {
   root.innerHTML = `
     <div class="dispatch" style="flex:1;display:flex;flex-direction:column;">
-      <div class="dispatch__banner">
-        <div class="check-circle">${icons.checkCircle('icon')}</div>
-        <div>
-          <div style="font-weight:700;font-size:18px;">911 has been called</div>
-          <div class="body-sm" style="opacity:0.9;">Location and status shared automatically</div>
-        </div>
+      <div class="dispatch__call">
+        <a class="btn btn--danger btn--block dispatch__call-btn" href="tel:911">
+          ${icons.phone()} Call 911
+        </a>
+        <p class="dispatch__call-note">Opens your phone's dialer. You confirm the call and talk to the dispatcher.</p>
       </div>
+
       <div class="dispatch__map" id="disp-map">
         <div class="map"><div class="map__canvas"></div></div>
-        <div class="badge-glass" id="disp-eta">${icons.ambulance()} EMS · 6 min away</div>
       </div>
+
       <div class="scroll-y dispatch__body">
-        <div class="card" style="margin-top:16px;">
-          <div class="reported-row">${icons.checkCircle()}<span>Exact GPS location sent</span></div>
-          <div class="reported-row">${icons.checkCircle()}<span id="disp-epi">Epinephrine administered</span></div>
-          <div class="reported-row">${icons.checkCircle()}<span>Symptoms: facial swelling, difficulty breathing</span></div>
+        <div class="card">
+          <span class="eyebrow">When the dispatcher answers, tell them</span>
+          <div class="script-row">${icons.alertTriangle()}<span>Severe allergic reaction — <strong>anaphylaxis</strong>.</span></div>
+          <div class="script-row">${icons.mapPin()}<span id="disp-loc">Your location</span></div>
+          <div class="script-row">${icons.clock()}<span id="disp-epi">Epinephrine given</span></div>
+          <div class="script-row">${icons.user()}<span>May need a second dose; watch breathing.</span></div>
         </div>
+
+        <button class="btn btn--secondary btn--block" id="disp-share">${icons.share()} Share status with a contact</button>
+
         <div class="stopwatch">
           <div class="eyebrow">Time since epinephrine</div>
           <div class="stopwatch__num" id="disp-timer">0:00</div>
@@ -71,33 +81,59 @@ function build() {
   paintMapBackground(mapEl); // backdrop until the real map loads
 
   root.querySelector('#disp-log').addEventListener('click', () => navigate('medicHandoff'));
+  root.querySelector('#disp-share').addEventListener('click', shareStatus);
 
   built = true;
 }
 
 function render() {
-  // Timestamp line.
-  const epiEl = root.querySelector('#disp-epi');
-  if (state.dispatch.epinephrineGivenAt) {
-    epiEl.textContent = `Epinephrine administered at ${formatTime(state.dispatch.epinephrineGivenAt)}`;
+  const coords = state.location;
+
+  // Location line for the dispatcher script — real coordinates, tappable to
+  // open a map. If we somehow have no fix, tell the user to read their address.
+  const locEl = root.querySelector('#disp-loc');
+  if (coords) {
+    const ll = `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`;
+    locEl.innerHTML = `Your location: <a href="https://maps.google.com/?q=${coords.lat},${coords.lng}" target="_blank" rel="noopener">${ll}</a>${state.locationIsDemo ? ' <em>(demo)</em>' : ''}`;
   } else {
-    epiEl.textContent = 'Epinephrine administered';
+    locEl.textContent = 'Your exact address or nearest cross-streets';
   }
 
-  // Real map centered on and pinned at the patient (user location). The
-  // ambulance is a simulated overlay that moves across the map surface.
-  const center = state.location || { lat: 37.7793, lng: -122.4193 };
-  mountMap(mapEl, center.lat, center.lng, { zoom: 15, interactive: false });
+  // Epinephrine timing line — real timestamp captured at injection.
+  const epiEl = root.querySelector('#disp-epi');
+  epiEl.textContent = state.dispatch.epinephrineGivenAt
+    ? `Epinephrine given at ${formatTime(state.dispatch.epinephrineGivenAt)}`
+    : 'Epinephrine given (note the time)';
 
-  mapEl.querySelectorAll('.ambulance').forEach((n) => n.remove());
-  const amb = document.createElement('div');
-  amb.className = 'ambulance';
-  amb.id = 'disp-amb';
-  amb.style.left = '14%';
-  amb.style.top = '16%';
-  amb.style.zIndex = '2';
-  amb.innerHTML = `<div class="ambulance__badge">${icons.ambulance()}</div>`;
-  mapEl.appendChild(amb);
+  // Real map centered on and pinned at the patient (user location). No overlays.
+  const center = coords || { lat: 37.7793, lng: -122.4193 };
+  mountMap(mapEl, center.lat, center.lng, { zoom: 15, interactive: false });
+}
+
+// Pre-fill a message with live location + status and hand it to the native
+// share sheet (or SMS as a fallback). The user picks the recipient and sends —
+// the app never sends silently.
+async function shareStatus() {
+  const coords = state.location;
+  const when = state.dispatch.epinephrineGivenAt
+    ? ` Epinephrine given at ${formatTime(state.dispatch.epinephrineGivenAt)}.`
+    : '';
+  const loc = coords
+    ? ` Location: https://maps.google.com/?q=${coords.lat},${coords.lng}.`
+    : '';
+  const text = `Emergency — severe allergic reaction (anaphylaxis). 911 is being called.${when}${loc} Please come if you can.`;
+
+  try {
+    if (navigator.share) {
+      await navigator.share({ text });
+      return;
+    }
+  } catch (_) {
+    // User dismissed the share sheet — nothing to do.
+    return;
+  }
+  // Fallback: open SMS composer with the body pre-filled (no recipient).
+  window.location.href = `sms:?&body=${encodeURIComponent(text)}`;
 }
 
 function startStopwatch() {
@@ -114,35 +150,6 @@ function startStopwatch() {
   };
   tick();
   stopwatchTimer = setInterval(tick, 1000);
-}
-
-// SIMULATED ambulance approach + ETA countdown. Pure UI, no real data.
-function startSimulations() {
-  clearInterval(ambulanceTimer);
-  clearInterval(etaTimer);
-
-  const amb = root.querySelector('#disp-amb');
-  let t = 0; // 0..1 progress toward the patient (map centre)
-  ambulanceTimer = setInterval(() => {
-    t = Math.min(1, t + 0.06);
-    if (amb) {
-      // Move the overlay from the corner toward the pinned patient at centre.
-      amb.style.left = `${14 + t * 36}%`;
-      amb.style.top = `${16 + t * 34}%`;
-    }
-    if (t >= 1) clearInterval(ambulanceTimer);
-  }, 1000);
-
-  let etaMin = 6;
-  const etaEl = root.querySelector('#disp-eta');
-  etaTimer = setInterval(() => {
-    if (etaMin > 1) etaMin -= 1;
-    etaEl.innerHTML = `${icons.ambulance()} EMS · ${etaMin} min away`;
-    if (etaMin <= 1) {
-      etaEl.innerHTML = `${icons.ambulance()} EMS arriving`;
-      clearInterval(etaTimer);
-    }
-  }, 4000);
 }
 
 function formatTime(date) {

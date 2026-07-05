@@ -79,8 +79,11 @@ no browser chrome (clean for Apple Frames screenshots later).
    status cues, honest read (**no confidence scores, ever**).
 3. **Guide** — the flagship: 6-step illustrated injection walkthrough, step 5 is a
    3-second hold countdown. Works instantly, no dependency on anyone else.
-4. **Dispatch** — *simulated* 911 dispatch UI + a **real** elapsed-time stopwatch
-   from the actual epinephrine timestamp.
+4. **Dispatch** — a **real** one-tap `tel:911` call button (user confirms the
+   call in the native dialer), a dispatcher script filled from real GPS + the
+   real epinephrine timestamp, a **real** share-status action (native share /
+   SMS, user sends), and a real elapsed-time stopwatch. The old fake "911 has
+   been called" banner, moving ambulance, and invented ETA are gone.
 5. **Checklist** — manual symptom fallback; matches when 2+ body systems are
    flagged.
 6–8. **Responder Alert / First-Responder View / Medic Handoff** — *simulated*
@@ -94,8 +97,13 @@ no browser chrome (clean for Apple Frames screenshots later).
 - **Flat illustrations.** Guide art is deliberately flat, 2-color, pictogram-style
   and abstracted (like AED pad-placement diagrams) for universal, skin-tone-
   agnostic, sub-2-second comprehension under panic. Never photorealistic.
-- **No real emergency contact.** Dispatch is a *simulated* UI state only — never
-  wired to a phone call, SMS, or any API that contacts real emergency services.
+- **Never contact anyone silently.** Dispatch reaches EMS and contacts only
+  through user-confirmed native handoffs: `tel:911` opens the dialer (the user
+  presses call and talks to the dispatcher), and share/SMS opens the composer
+  (the user picks the recipient and sends). The app must NEVER auto-place a
+  call, auto-send an SMS, or hit a direct dispatch/PSAP API from the client. A
+  server-side EMS-data integration (e.g. RapidSOS) would require a signed
+  partnership + BAA before it is wired — see any future EMS integration notes.
 - **No live-person option.** Recognize has exactly two modes: *AI Vision* and
   *Checklist*. A "Live Pro"/live-person option was explicitly removed and must
   never be reintroduced.
