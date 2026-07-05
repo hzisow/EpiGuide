@@ -115,17 +115,26 @@ function render() {
 // the app never sends silently.
 async function shareStatus() {
   const coords = state.location;
-  const when = state.dispatch.epinephrineGivenAt
-    ? ` Epinephrine given at ${formatTime(state.dispatch.epinephrineGivenAt)}.`
-    : '';
-  const loc = coords
-    ? ` Location: https://maps.google.com/?q=${coords.lat},${coords.lng}.`
-    : '';
-  const text = `Emergency — severe allergic reaction (anaphylaxis). 911 is being called.${when}${loc} Please come if you can.`;
+
+  // Build a clean, scannable message — one fact per line, so it reads well in
+  // a text message rather than as a run-on sentence.
+  const lines = [
+    '🚨 EMERGENCY — anaphylaxis (severe allergic reaction).',
+    '',
+    '911 is being called.',
+  ];
+  if (state.dispatch.epinephrineGivenAt) {
+    lines.push(`Epinephrine given at ${formatTime(state.dispatch.epinephrineGivenAt)}.`);
+  }
+  if (coords) {
+    lines.push('', `📍 Location: https://maps.google.com/?q=${coords.lat},${coords.lng}`);
+  }
+  lines.push('', 'Please come if you can.');
+  const text = lines.join('\n');
 
   try {
     if (navigator.share) {
-      await navigator.share({ text });
+      await navigator.share({ title: 'Emergency — anaphylaxis', text });
       return;
     }
   } catch (_) {
