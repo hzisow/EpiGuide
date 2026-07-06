@@ -140,15 +140,21 @@ export function navigate(to, { direction } = {}) {
   toEl.classList.remove('screen--leaving-left', 'screen--leaving-right');
   toEl.classList.add('screen--animating');
   toEl.classList.add(dir === 'forward' ? 'screen--entering-right' : 'screen--entering-left');
-  // Force reflow so the entering transform applies before we animate it away.
-  void toEl.offsetWidth;
-  toEl.classList.add('screen--active');
-  toEl.classList.remove('screen--entering-right', 'screen--entering-left');
+  if (fromEl && fromEl !== toEl) fromEl.classList.add('screen--animating');
 
-  if (fromEl && fromEl !== toEl) {
-    fromEl.classList.add('screen--animating');
-    fromEl.classList.add(dir === 'forward' ? 'screen--leaving-left' : 'screen--leaving-right');
-  }
+  // Double rAF: guarantees the browser has actually painted the "entering"
+  // starting position before we flip to the end state, so the transition
+  // reliably animates every time instead of occasionally snapping straight
+  // to the end value (a known flake with a single forced-reflow read).
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      toEl.classList.add('screen--active');
+      toEl.classList.remove('screen--entering-right', 'screen--entering-left');
+      if (fromEl && fromEl !== toEl) {
+        fromEl.classList.add(dir === 'forward' ? 'screen--leaving-left' : 'screen--leaving-right');
+      }
+    });
+  });
 
   const done = () => {
     fromEl?.classList.remove('screen--active', 'screen--animating', 'screen--leaving-left', 'screen--leaving-right');
@@ -158,7 +164,7 @@ export function navigate(to, { direction } = {}) {
   };
   toEl.addEventListener('transitionend', done);
   // Safety fallback in case transitionend doesn't fire.
-  setTimeout(done, 400);
+  setTimeout(done, 550);
 }
 
 // The tab bar stays visible on every screen — including full-screen permission

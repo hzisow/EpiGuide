@@ -209,6 +209,16 @@
 .recognize__video { object-fit: cover; }
 .recognize__overlay { z-index: 2; pointer-events: none; }
 
+/* Front camera: mirror like a normal selfie view, not the raw "backwards"
+   sensor feed. The overlay canvas mirrors right along with the video —
+   its face-tracking box is drawn from un-mirrored landmark coordinates, so
+   mirroring both together keeps them visually aligned without touching any
+   of the detection math. */
+.recognize--mirrored .recognize__video,
+.recognize--mirrored .recognize__overlay {
+  transform: scaleX(-1);
+}
+
 .recognize__toolbar {
   position: absolute;
   top: max(var(--space-4), env(safe-area-inset-top));
@@ -226,15 +236,15 @@
   height: 44px;
   display: inline-grid;
   place-items: center;
-  border: none;
+  border: 1.5px solid rgba(255,255,255,0.5);
   border-radius: var(--radius-pill);
   background: rgba(0,0,0,0.55);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   color: #fff;
 }
-.recognize__flip svg { width: 22px; height: 22px; }
-.recognize__flip:active { background: rgba(0,0,0,0.75); }
+.recognize__flip svg { width: 24px; height: 24px; }
+.recognize__flip:active { background: rgba(0,0,0,0.75); transform: scale(0.94); }
 .recognize__flip[aria-disabled="true"] { opacity: 0.4; pointer-events: none; }
 .recognize__badges {
   position: absolute;
@@ -361,15 +371,15 @@
 @media (prefers-reduced-motion: no-preference) {
   .ga-squeeze { animation: ga-squeeze 2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
   .ga-pop { animation: ga-pop 0.5s var(--ease-out) 0.3s both; transform-box: fill-box; transform-origin: center; }
-  .ga-cap { animation: ga-cap-pull 2.4s ease-in-out infinite; }
-  .ga-cap-arrow { animation: ga-fade-cycle 2.4s ease-in-out infinite; }
-  .ga-approach { animation: ga-approach 2.6s ease-in-out infinite; }
-  .ga-push-arrow { animation: ga-fade-cycle 1.8s ease-in-out infinite; }
-  .ga-jab { animation: ga-jab 1.8s ease-in-out infinite; }
-  .ga-burst { animation: ga-burst 1.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  .ga-cap { animation: ga-cap-pull 2.4s linear infinite; }
+  .ga-cap-arrow { animation: ga-fade-cycle 2.4s linear infinite; }
+  .ga-approach { animation: ga-approach 2.6s linear infinite; }
+  .ga-push-arrow { animation: ga-fade-cycle 1.8s linear infinite; }
+  .ga-jab { animation: ga-jab 1.8s linear infinite; }
+  .ga-burst { animation: ga-burst 1.8s linear infinite; transform-box: fill-box; transform-origin: center; }
   .ga-clock-hand { animation: ga-rotate 3s linear infinite; }
-  .ga-lift { animation: ga-lift 2.6s ease-in-out infinite; }
-  .ga-ring { animation: ga-ring 2.2s ease-in-out infinite; }
+  .ga-lift { animation: ga-lift 2.6s linear infinite; }
+  .ga-ring { animation: ga-ring 2.2s linear infinite; }
 }
 @keyframes ga-squeeze { 0%, 100% { transform: scale(1); } 50% { transform: scale(0.98); } }
 @keyframes ga-pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
@@ -544,7 +554,14 @@
 .result-card {
   border-radius: var(--radius-lg);
   padding: var(--space-5);
-  transition: background-color var(--duration-base) var(--ease-out);
+  animation: result-card-in var(--duration-base) var(--ease-out);
+}
+@keyframes result-card-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .result-card { animation: none; }
 }
 .result-card--urgent {
   background: var(--color-red);

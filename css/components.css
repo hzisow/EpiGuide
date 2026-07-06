@@ -88,6 +88,14 @@
   border-radius: var(--radius-pill);
   font-size: 14px;
   font-weight: 500;
+  animation: badge-in 220ms var(--ease-out);
+}
+@keyframes badge-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .badge-glass { animation: none; }
 }
 
 .pill {
@@ -183,12 +191,14 @@
   content: "";
   display: block;
   height: 100%;
-  width: 0;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: left;
   background: var(--color-red);
   border-radius: var(--radius-pill);
-  transition: width var(--duration-base) var(--ease-out);
+  transition: transform var(--duration-base) var(--ease-out);
 }
-.progress__seg--filled::after { width: 100%; }
+.progress__seg--filled::after { transform: scaleX(1); }
 
 /* ============================================================
    Icon button (replay, back)

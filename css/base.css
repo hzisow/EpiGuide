@@ -81,7 +81,6 @@ h1, h2, h3, p { margin: 0; }
   flex-direction: column;
   background: var(--color-white);
   visibility: hidden;
-  opacity: 0;
   transform: translateX(100%);
   pointer-events: none;
   overflow: hidden;
@@ -89,19 +88,22 @@ h1, h2, h3, p { margin: 0; }
 
 .screen--active {
   visibility: visible;
-  opacity: 1;
   transform: translateX(0);
   pointer-events: auto;
   z-index: 2;
 }
 
-/* Slide transitions driven by app.js adding direction classes */
-.screen--animating { transition:
-    transform var(--duration-base) var(--ease-out),
-    opacity var(--duration-base) var(--ease-out); }
+/* Slide transitions driven by app.js adding direction classes. Pure transform
+   (no opacity) — a straight slide reads far crisper than a slide+cross-fade,
+   and stays fully GPU-composited. will-change is scoped to just the animating
+   window so it doesn't leave a stray compositor layer sitting around after. */
+.screen--animating {
+  transition: transform var(--duration-slow) var(--ease-out);
+  will-change: transform;
+}
 
-.screen--leaving-left  { transform: translateX(-30%); opacity: 0; z-index: 1; }
-.screen--leaving-right { transform: translateX(100%);  opacity: 0; z-index: 1; }
+.screen--leaving-left  { transform: translateX(-30%); z-index: 1; }
+.screen--leaving-right { transform: translateX(100%); z-index: 1; }
 .screen--entering-right { transform: translateX(100%); }
 .screen--entering-left  { transform: translateX(-30%); }
 

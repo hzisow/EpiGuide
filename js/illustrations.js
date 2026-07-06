@@ -187,7 +187,7 @@ export const illustrations = {
     ${penH(168, 150)}
     ${handH(168, 150)}
     <circle cx="66" cy="64" r="28" fill="#fff" stroke="${INK}" stroke-width="6"/>
-    <path class="ga-clock-hand" style="transform-box:view-box;transform-origin:66px 64px"
+    <path class="ga-clock-hand" style="transform-box:view-box;transform-origin:66px 64px;animation-duration:3s"
           d="M66 64V46" stroke="${RED}" stroke-width="6"/>
     <circle cx="66" cy="64" r="4" fill="${RED}"/>
   `),
@@ -259,7 +259,7 @@ export const illustrations = {
     ${auviH(168, 150)}
     ${handH(168, 150)}
     <circle cx="66" cy="64" r="28" fill="#fff" stroke="${INK}" stroke-width="6"/>
-    <path class="ga-clock-hand" style="transform-box:view-box;transform-origin:66px 64px"
+    <path class="ga-clock-hand" style="transform-box:view-box;transform-origin:66px 64px;animation-duration:2s"
           d="M66 64V46" stroke="${RED}" stroke-width="6"/>
     <circle cx="66" cy="64" r="4" fill="${RED}"/>
   `),
@@ -332,7 +332,7 @@ export const illustrations = {
     ${adrenaH(168, 150)}
     ${handH(168, 150)}
     <circle cx="66" cy="64" r="28" fill="#fff" stroke="${INK}" stroke-width="6"/>
-    <path class="ga-clock-hand" style="transform-box:view-box;transform-origin:66px 64px"
+    <path class="ga-clock-hand" style="transform-box:view-box;transform-origin:66px 64px;animation-duration:10s"
           d="M66 64V46" stroke="${RED}" stroke-width="6"/>
     <circle cx="66" cy="64" r="4" fill="${RED}"/>
   `),

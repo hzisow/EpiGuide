@@ -17,7 +17,7 @@ import { isDebugMode, URGENCY_COPY, debugPanelHTML } from '../modelUi.js';
 import { createFaceVision, coverTransform, FACE_OVAL, OUTER_LIPS, LEFT_EYE, RIGHT_EYE } from '../faceVision.js';
 import { ensureHivesModel, classifySkin } from '../hivesModel.js';
 
-let root, video, canvas, ctx, badgesEl, sheetEl, permEl, toolbarEl, flipEl;
+let root, video, canvas, ctx, badgesEl, sheetEl, permEl, toolbarEl, flipEl, recognizeEl;
 let built = false;
 let stream = null;
 let facingMode = 'environment'; // 'environment' (rear, default) or 'user' (front)
@@ -101,6 +101,7 @@ function build() {
   permEl = root.querySelector('#rec-perm');
   toolbarEl = root.querySelector('#rec-toolbar');
   flipEl = root.querySelector('#rec-flip');
+  recognizeEl = root.querySelector('.recognize');
 
   // Mode toggle — only two segments, ever. No "Live Pro" / live-person option.
   toolbarEl.addEventListener('click', (e) => {
@@ -114,6 +115,12 @@ function build() {
   flipEl.addEventListener('click', flipCamera);
 
   built = true;
+}
+
+// Front camera should feel like a normal selfie view (mirrored), not the
+// "backwards" raw sensor feed. Rear camera stays unmirrored, as normal.
+function updateMirror() {
+  recognizeEl.classList.toggle('recognize--mirrored', facingMode === 'user');
 }
 
 function showPermPrompt() {
@@ -145,6 +152,7 @@ async function startCamera() {
   await video.play().catch(() => {});
   permEl.hidden = true;
   flipEl.hidden = false;
+  updateMirror();
   sizeCanvas();
   window.addEventListener('resize', sizeCanvas);
 
@@ -187,6 +195,7 @@ async function flipCamera() {
 
   video.srcObject = stream;
   await video.play().catch(() => {});
+  updateMirror();
 
   // Fresh camera view — reset the scan so old-camera votes don't mix in.
   seenFrames = 0;
