@@ -3,7 +3,7 @@
 // to model feature keys, scored with the safety override, and shown as a CATEGORY
 // + urgency. The raw probability + weight breakdown appear ONLY behind ?debug.
 
-import { state, navigate } from '../app.js';
+import { state, navigate, logIncidentEventOnce } from '../app.js';
 import { icons } from '../icons.js';
 import { checklistCategories, checklistToModelState } from '../data/checklistItems.js';
 import { scoreWithSafetyOverride } from '../model.js';
@@ -14,6 +14,7 @@ let root, built = false;
 export function initChecklist() {
   root = document.querySelector('.screen[data-screen="checklist"]');
   if (!built) build();
+  logIncidentEventOnce('start', 'Symptom check started');
   // Restore checked state from app state.
   syncFromState();
   updateResult();
@@ -74,6 +75,10 @@ function updateResult() {
   const el = root.querySelector('#cl-result');
   const debug = isDebugMode() ? debugPanelHTML(result) : '';
 
+  if (result.urgency === 'act-now' || result.urgency === 'caution') {
+    logIncidentEventOnce('symptoms-identified', 'Symptoms consistent with possible anaphylaxis identified');
+  }
+
   if (result.urgency === 'act-now') {
     el.innerHTML = `
       <div class="result-card result-card--urgent">
@@ -117,6 +122,7 @@ function updateResult() {
 
 function wireContinue(el) {
   el.querySelector('#cl-continue')?.addEventListener('click', () => {
+    logIncidentEventOnce('proceed-to-guide', 'Proceeded to injection guide');
     state.guide.currentStep = 1;
     navigate('guide');
   });

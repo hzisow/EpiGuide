@@ -15,7 +15,7 @@
 // invented ETA countdown have been removed — the app never claims something
 // happened that didn't.
 
-import { state, navigate } from '../app.js';
+import { state, navigate, logIncidentEvent, logIncidentEventOnce } from '../app.js';
 import { icons } from '../icons.js';
 import { paintMapBackground, mountMap, reverseGeocode } from '../map.js';
 import { mountVolunteerCard } from '../volunteerCard.js';
@@ -33,7 +33,7 @@ export function initDispatch() {
   // Live volunteer status. The alert itself is raised from the Find screen;
   // if one is active this shows responders, otherwise it offers the button.
   volTeardown = mountVolunteerCard(root.querySelector('#disp-vol'), {
-    lead: 'No pen nearby? Alert people close by who carry an EpiPen — separate from your 911 call.',
+    lead: 'No auto-injector nearby? Alert people close by who carry epinephrine — separate from your 911 call.',
   });
 }
 
@@ -80,6 +80,9 @@ function build() {
   mapEl = root.querySelector('#disp-map .map');
   paintMapBackground(mapEl); // backdrop until the real map loads
 
+  root.querySelector('.dispatch__call-btn').addEventListener('click', () => {
+    logIncidentEventOnce('911-called', '911 called');
+  });
   root.querySelector('#disp-log').addEventListener('click', () => navigate('medicHandoff'));
   root.querySelector('#disp-share').addEventListener('click', shareStatus);
 
@@ -142,6 +145,7 @@ async function shareStatus() {
   try {
     if (navigator.share) {
       await navigator.share({ title: 'Emergency — anaphylaxis', text });
+      logIncidentEvent('Status shared with a contact');
       return;
     }
   } catch (_) {
@@ -150,6 +154,7 @@ async function shareStatus() {
   }
   // Fallback: open SMS composer with the body pre-filled (no recipient).
   window.location.href = `sms:?&body=${encodeURIComponent(text)}`;
+  logIncidentEvent('Status shared with a contact');
 }
 
 function startStopwatch() {

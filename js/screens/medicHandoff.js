@@ -4,7 +4,7 @@
 // injection, the symptoms the user actually checked, and the reverse-geocoded
 // address of their real GPS location.
 
-import { state } from '../app.js';
+import { state, navigate, logIncidentEvent, logIncidentEventOnce } from '../app.js';
 import { icons } from '../icons.js';
 import { paintMapBackground, mountMap, reverseGeocode } from '../map.js';
 import { checklistCategories } from '../data/checklistItems.js';
@@ -16,6 +16,7 @@ let root, built = false;
 export function initMedicHandoff() {
   root = document.querySelector('.screen[data-screen="medicHandoff"]');
   if (!built) build();
+  logIncidentEventOnce('ems-handoff-shown', 'EMS handoff screen shown');
   render();
 }
 
@@ -47,6 +48,7 @@ function build() {
       </div>
       <div class="medic__foot">
         <button class="btn btn--dark btn--block" id="mh-share">${icons.share()} Share full timeline with EMS</button>
+        <button class="btn btn--ghost" id="mh-summary" style="margin:12px auto 0;display:block;">${icons.fileText()} View incident summary</button>
       </div>
     </div>`;
 
@@ -54,7 +56,10 @@ function build() {
     const btn = root.querySelector('#mh-share');
     btn.innerHTML = `${icons.checkCircle()} Timeline shared`;
     btn.setAttribute('aria-disabled', 'true');
+    logIncidentEvent('Timeline shared with EMS');
   });
+
+  root.querySelector('#mh-summary').addEventListener('click', () => navigate('incidentSummary'));
 
   built = true;
 }

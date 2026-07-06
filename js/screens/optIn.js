@@ -31,7 +31,7 @@ function build() {
     <div class="optin">
       <div class="optin__head">
         <span class="eyebrow" style="color:var(--color-blue);">Responder network</span>
-        <h1 class="h1" style="margin-top:4px;">Carry an EpiPen? Help someone nearby.</h1>
+        <h1 class="h1" style="margin-top:4px;">Carry epinephrine? Help someone nearby.</h1>
         <p class="body-sm text-muted" style="margin-top:6px;">
           Opt in and you'll get a live alert if someone close by needs epinephrine before EMS arrives.
         </p>

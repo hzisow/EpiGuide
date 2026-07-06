@@ -217,6 +217,25 @@
   display: flex;
   justify-content: center;
 }
+.recognize__flip {
+  position: absolute;
+  top: max(var(--space-4), env(safe-area-inset-top));
+  right: var(--space-4);
+  z-index: 6;
+  width: 44px;
+  height: 44px;
+  display: inline-grid;
+  place-items: center;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: rgba(0,0,0,0.55);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: #fff;
+}
+.recognize__flip svg { width: 22px; height: 22px; }
+.recognize__flip:active { background: rgba(0,0,0,0.75); }
+.recognize__flip[aria-disabled="true"] { opacity: 0.4; pointer-events: none; }
 .recognize__badges {
   position: absolute;
   top: 40%;
@@ -667,6 +686,41 @@
   box-shadow: inset 0 0 0 1px var(--color-gray-divider);
 }
 .medic__foot { padding: 0 var(--space-4) max(var(--space-5), env(safe-area-inset-bottom)); }
+
+/* ============================================================
+   Screen 9 — Incident Summary
+   ============================================================ */
+.incident { background: var(--color-gray-bg); }
+
+.timeline__row {
+  display: flex;
+  gap: var(--space-3);
+}
+.timeline__rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 12px;
+  flex-shrink: 0;
+}
+.timeline__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-blue);
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+.timeline__row:not(:last-child) .timeline__rail::after {
+  content: '';
+  flex: 1;
+  width: 2px;
+  background: var(--color-gray-divider);
+  margin-top: 2px;
+}
+.timeline__content { padding-bottom: var(--space-4); }
+.timeline__time { font-size: 12px; font-weight: 600; color: var(--color-gray-text); }
+.timeline__label { font-size: 15px; color: var(--color-ink); margin-top: 2px; }
 
 /* ============================================================
    Generic app header with back button

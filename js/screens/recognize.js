@@ -10,16 +10,17 @@
 // symptom model the checklist uses. It does not diagnose; the bystander decides.
 // When nothing is visible, the app says so honestly instead of inventing a match.
 
-import { state, navigate } from '../app.js';
+import { state, navigate, logIncidentEventOnce } from '../app.js';
 import { icons } from '../icons.js';
 import { scoreWithSafetyOverride } from '../model.js';
 import { isDebugMode, URGENCY_COPY, debugPanelHTML } from '../modelUi.js';
 import { createFaceVision, coverTransform, FACE_OVAL, OUTER_LIPS, LEFT_EYE, RIGHT_EYE } from '../faceVision.js';
 import { ensureHivesModel, classifySkin } from '../hivesModel.js';
 
-let root, video, canvas, ctx, badgesEl, sheetEl, permEl, toolbarEl;
+let root, video, canvas, ctx, badgesEl, sheetEl, permEl, toolbarEl, flipEl;
 let built = false;
 let stream = null;
+let facingMode = 'environment'; // 'environment' (rear, default) or 'user' (front)
 let faceMesh = null;
 let rafId = null;
 let badgeTimer = null;
@@ -45,8 +46,10 @@ const CNN_EVERY = 8;           // run the CNN every N landmark frames
 export function initRecognize() {
   root = document.querySelector('.screen[data-screen="recognize"]');
   if (!built) build();
+  logIncidentEventOnce('start', 'Symptom check started');
   // Reset per-visit UI + vision state.
   state.recognize.result = null;
+  facingMode = 'environment';
   seenFrames = 0;
   lastFaceBox = null;
   faceVision = createFaceVision();
@@ -73,6 +76,7 @@ function build() {
           <button role="tab" aria-selected="false" data-mode="checklist">Checklist</button>
         </div>
       </div>
+      <button class="recognize__flip" id="rec-flip" aria-label="Switch camera" hidden>${icons.flipCamera()}</button>
 
       <div class="recognize__badges" id="rec-badges"></div>
 
@@ -96,6 +100,7 @@ function build() {
   sheetEl = root.querySelector('#rec-sheet');
   permEl = root.querySelector('#rec-perm');
   toolbarEl = root.querySelector('#rec-toolbar');
+  flipEl = root.querySelector('#rec-flip');
 
   // Mode toggle — only two segments, ever. No "Live Pro" / live-person option.
   toolbarEl.addEventListener('click', (e) => {
@@ -106,12 +111,14 @@ function build() {
 
   root.querySelector('#rec-allow').addEventListener('click', startCamera);
   root.querySelector('#rec-tochecklist').addEventListener('click', () => navigate('checklist'));
+  flipEl.addEventListener('click', flipCamera);
 
   built = true;
 }
 
 function showPermPrompt() {
   permEl.hidden = false;
+  flipEl.hidden = true;
   badgesEl.innerHTML = '';
 }
 
@@ -122,7 +129,7 @@ async function startCamera() {
 
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' },
+      video: { facingMode },
       audio: false,
     });
   } catch (err) {
@@ -137,6 +144,7 @@ async function startCamera() {
   video.srcObject = stream;
   await video.play().catch(() => {});
   permEl.hidden = true;
+  flipEl.hidden = false;
   sizeCanvas();
   window.addEventListener('resize', sizeCanvas);
 
@@ -151,6 +159,55 @@ async function startCamera() {
   // Fallback reveal: even if detection is sparse, present the read after a scan
   // window so the flow always progresses.
   revealTimer = setTimeout(reveal, 6000);
+}
+
+// Swap between rear (default) and front camera. Keeps the already-loaded
+// FaceMesh instance and detection loop running — only the video track
+// changes — but resets the per-scan vote counters, since a new camera view
+// is a fresh read and shouldn't be blended with the old one.
+async function flipCamera() {
+  if (!running || flipEl.hasAttribute('aria-disabled')) return;
+  flipEl.setAttribute('aria-disabled', 'true');
+  const nextFacing = facingMode === 'environment' ? 'user' : 'environment';
+
+  const oldStream = stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: nextFacing },
+      audio: false,
+    });
+    facingMode = nextFacing;
+  } catch (err) {
+    // No camera on that side (or blocked) — keep the one we already had.
+    flipEl.removeAttribute('aria-disabled');
+    return;
+  } finally {
+    if (oldStream) oldStream.getTracks().forEach((t) => t.stop());
+  }
+
+  video.srcObject = stream;
+  await video.play().catch(() => {});
+
+  // Fresh camera view — reset the scan so old-camera votes don't mix in.
+  seenFrames = 0;
+  lastFaceBox = null;
+  faceVision = createFaceVision();
+  readyFrames = swellVotes = flushVotes = 0;
+  reactionSum = reactionN = cnnFrame = 0;
+  lastSkinTop = null; lastSkinProb = 0;
+
+  // If a result had already been revealed, don't leave a stale read on
+  // screen for the new camera view — go back to scanning honestly.
+  if (state.recognize.result === 'match') {
+    state.recognize.result = null;
+    sheetEl.hidden = true;
+    sheetEl.innerHTML = '';
+    startBadgeCycle();
+  }
+  clearTimeout(revealTimer);
+  revealTimer = setTimeout(reveal, 6000);
+
+  flipEl.removeAttribute('aria-disabled');
 }
 
 function sizeCanvas() {
@@ -470,6 +527,9 @@ function reveal() {
 
   // Strong read → straight to Guide. Softer → confirm other systems on checklist.
   const strong = result.urgency === 'act-now' || result.urgency === 'caution';
+  if (strong) {
+    logIncidentEventOnce('symptoms-identified', 'Symptoms consistent with possible anaphylaxis identified (camera-assisted)');
+  }
   const primary = strong
     ? `<button class="btn btn--primary btn--block" id="rec-confirm">Confirm &amp; Continue</button>
        <button class="btn btn--ghost" id="rec-checklist">Not sure — use checklist instead</button>`
@@ -492,6 +552,7 @@ function reveal() {
 function wireRevealButtons() {
   sheetEl.querySelector('#rec-confirm')?.addEventListener('click', () => {
     // Begin the epinephrine timing once the Guide completes (set at step 6).
+    logIncidentEventOnce('proceed-to-guide', 'Proceeded to injection guide');
     state.guide.currentStep = 1;
     navigate('guide');
   });
@@ -534,6 +595,7 @@ function stopCamera() {
     stream.getTracks().forEach((t) => t.stop());
     stream = null;
   }
+  if (flipEl) flipEl.hidden = true;
   if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
 }
 

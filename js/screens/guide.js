@@ -4,7 +4,7 @@
 // automatically (from the injector a responding volunteer carries, set in
 // volunteerCard) or by the patient via the picker.
 
-import { state, navigate } from '../app.js';
+import { state, navigate, logIncidentEvent } from '../app.js';
 import { icons } from '../icons.js';
 import { guides, DEVICE_ORDER } from '../data/guideSteps.js';
 import { illustrations } from '../illustrations.js';
@@ -75,6 +75,7 @@ function renderPicker() {
       state.guide.device = b.dataset.device;
       state.guide.deviceLocked = true; // user's explicit choice wins over auto-match
       state.guide.currentStep = 1;
+      logIncidentEvent(`Selected device: ${guides[b.dataset.device].label}`);
       renderStep();
     }));
 }
@@ -175,6 +176,8 @@ function advance() {
   if (state.guide.currentStep >= total) {
     // Completing the last step: record the epinephrine timestamp, go to Dispatch.
     state.dispatch.epinephrineGivenAt = new Date();
+    const deviceLabel = guides[state.guide.device]?.label || 'auto-injector';
+    logIncidentEvent(`Epinephrine administered (${deviceLabel})`);
     state.guide.currentStep = 1; // reset for next run (keep the chosen device)
     navigate('dispatch');
     return;

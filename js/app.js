@@ -9,11 +9,13 @@ import { initResponderAlert } from './screens/responderAlert.js';
 import { initFirstResponderView } from './screens/firstResponderView.js';
 import { initMedicHandoff } from './screens/medicHandoff.js';
 import { initOptIn, teardownOptIn } from './screens/optIn.js';
+import { initIncidentSummary } from './screens/incidentSummary.js';
 import { icons } from './icons.js';
 
 export const state = {
   currentScreen: 'find', // find | recognize | guide | dispatch | checklist |
-                         // responderAlert | firstResponderView | medicHandoff
+                         // responderAlert | firstResponderView | medicHandoff |
+                         // incidentSummary
   recognize: { result: null },            // null | 'match' | 'noMatch'
   guide: { currentStep: 1, device: null, deviceLocked: false }, // device: which injector's steps
   checklist: { checkedItemIds: [] },
@@ -22,11 +24,45 @@ export const state = {
   responderSelfCoords: null,              // this responder's own location (radius filter)
   incomingAlert: null,                    // real alert routed to a responder
   activeAlert: null,                      // real alert this device raised (patient side)
+  incident: { events: [] },               // chronological log powering the post-incident summary
 };
+
+// Chronological incident timeline. Every entry is something that REALLY
+// happened on this device (a real timestamp, a real tap) — never invented,
+// same honesty rule as the rest of the app. `logIncidentEventOnce` guards
+// against re-logging the same milestone when a screen re-inits (several
+// screens are ALWAYS_REINIT and would otherwise fire repeatedly).
+const loggedOnceKeys = new Set();
+
+export function logIncidentEvent(label) {
+  state.incident.events.push({ time: new Date(), label });
+}
+
+export function logIncidentEventOnce(key, label) {
+  if (loggedOnceKeys.has(key)) return;
+  loggedOnceKeys.add(key);
+  logIncidentEvent(label);
+}
+
+// Clears the timeline and all app state tied to a single emergency, so the
+// device is ready for an unrelated future incident. Deliberately leaves
+// responder opt-in / saved pens (js/epipens.js) untouched — that's the
+// person's standing profile, not this incident's data.
+export function resetIncident() {
+  state.incident.events = [];
+  loggedOnceKeys.clear();
+  state.recognize.result = null;
+  state.guide.currentStep = 1;
+  state.guide.device = null;
+  state.guide.deviceLocked = false;
+  state.checklist.checkedItemIds = [];
+  state.dispatch.epinephrineGivenAt = null;
+  state.activeAlert = null;
+}
 
 const ORDER = [
   'find', 'recognize', 'guide', 'dispatch', 'checklist', 'optIn',
-  'responderAlert', 'firstResponderView', 'medicHandoff',
+  'responderAlert', 'firstResponderView', 'medicHandoff', 'incidentSummary',
 ];
 
 // Per-screen init hooks. Called the first time a screen is shown (and re-called
@@ -41,12 +77,13 @@ const initializers = {
   firstResponderView: initFirstResponderView,
   medicHandoff: initMedicHandoff,
   optIn: initOptIn,
+  incidentSummary: initIncidentSummary,
 };
 
 // Screens that must re-run their init every time they become active because
 // they depend on live state (timestamps, checked items, current step).
 const ALWAYS_REINIT = new Set([
-  'guide', 'dispatch', 'checklist', 'medicHandoff', 'firstResponderView',
+  'guide', 'dispatch', 'checklist', 'medicHandoff', 'firstResponderView', 'incidentSummary',
 ]);
 
 // Teardown hooks (release camera, stop intervals) when leaving a screen.

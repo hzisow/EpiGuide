@@ -35,7 +35,7 @@ function build() {
           </div>
           <div class="welcome__why">
             ${icons.mapPin()}
-            <p class="body-sm">Your location is used only to show your address for 911 and — only if you ask — to alert nearby volunteers who carry an EpiPen.</p>
+            <p class="body-sm">Your location is used only to show your address for 911 and — only if you ask — to alert nearby volunteers who carry an epinephrine auto-injector.</p>
           </div>
           <button class="btn btn--primary btn--block" id="find-allow">Allow location</button>
           <p class="welcome__error" id="find-error" hidden></p>

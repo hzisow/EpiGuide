@@ -5,7 +5,7 @@
 //
 // net.js (Supabase) stays lazily imported so the core flow works offline.
 
-import { state } from './app.js';
+import { state, logIncidentEventOnce } from './app.js';
 import { icons } from './icons.js';
 import { injectorToDevice, guides } from './data/guideSteps.js';
 
@@ -25,7 +25,7 @@ export function mountVolunteerCard(container, { lead } = {}) {
         <span class="pill pill--blue">Live network</span>
       </div>
       <p class="body-sm text-muted" data-vol-status>
-        ${lead || 'No auto-injector on hand? Alert people nearby who carry an EpiPen and have opted in to help.'}
+        ${lead || 'No auto-injector on hand? Alert people nearby who carry epinephrine and have opted in to help.'}
       </p>
       <div class="vol-list" data-vol-list></div>
       <button class="btn btn--vol btn--block" data-vol-btn>${icons.bell()} Alert nearby volunteers</button>
@@ -51,6 +51,7 @@ async function raise(container) {
       ? 'Likely anaphylaxis — needs epinephrine'
       : 'Possible anaphylaxis — needs epinephrine';
     state.activeAlert = await n.raiseAlert({ lat: coords.lat, lng: coords.lng, note });
+    logIncidentEventOnce('alert-raised', 'Nearby responder network alerted');
     await attach(container, state.activeAlert);
   } catch (e) {
     btn.removeAttribute('aria-disabled');
@@ -91,6 +92,10 @@ function render(n, alert) {
     return;
   }
   status.textContent = `${rows.length} volunteer${rows.length > 1 ? 's' : ''} responding`;
+  logIncidentEventOnce('responder-responding', 'A nearby volunteer responded to the alert');
+  if (rows.some((r) => r.status === 'arrived')) {
+    logIncidentEventOnce('responder-arrived', 'A volunteer arrived on scene');
+  }
 
   // Auto-match the injection guide to the pen a responding volunteer is bringing,
   // so the patient's walkthrough is for the RIGHT device — unless the patient has
