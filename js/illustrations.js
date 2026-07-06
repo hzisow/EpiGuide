@@ -46,30 +46,43 @@ const penH = (tipX, cy) => `
   <rect x="${tipX - 20}" y="${cy - 14}" width="20" height="28" rx="8" fill="${ORANGE}" stroke="${INK}" stroke-width="5"/>`;
 
 // ---- Hand (neutral gray, card-style fist) ------------------------------------
-// Fist wrapped around the vertical pen at cy: wrist, palm, four finger bumps.
+// Fist wrapped around the vertical pen at cy: a rounded knuckle mass that
+// overlaps the pen's lower body (fingers curling over it), knuckle ridges,
+// finger-crease lines, and a tapered wrist below.
 const fistV = (cx, cy) => `
-  <rect x="${cx - 12}" y="${cy + 26}" width="42" height="44" rx="16" fill="${GRAY}" stroke="${INK}" stroke-width="5"/>
-  <rect x="${cx - 34}" y="${cy - 34}" width="66" height="66" rx="24" fill="${GRAY}" stroke="${INK}" stroke-width="5"/>
-  ${[-27, -12, 3, 18].map((dy) =>
-    `<rect x="${cx - 30}" y="${cy + dy}" width="56" height="13" rx="6.5" fill="${GRAY}" stroke="${INK}" stroke-width="4"/>`
-  ).join('')}`;
+  <path d="M${cx - 40} ${cy - 8} q-6 -30 22 -40 q18 -6 18 -6 q4 0 18 6 q28 10 22 40 q4 18 -6 30 q-12 14 -34 14 q-22 0 -34 -14 q-10 -12 -6 -30 Z"
+        fill="${GRAY}" stroke="${INK}" stroke-width="5"/>
+  <path d="M${cx - 20} ${cy + 26} q0 -10 14 -10 h12 q14 0 14 10 v42 q0 16 -16 16 h-8 q-16 0 -16 -16 Z"
+        fill="${GRAY}" stroke="${INK}" stroke-width="5"/>
+  <path d="M${cx - 26} ${cy - 40}q4-14 16-14t16 14M${cx} ${cy - 44}q4-15 17-15t17 15"
+        stroke="${INK}" stroke-width="3.5" opacity="0.4" fill="none"/>
+  <path d="M${cx - 20} ${cy - 24}v34M${cx} ${cy - 28}v40M${cx + 20} ${cy - 24}v34"
+        stroke="${INK}" stroke-width="2.5" opacity="0.3" fill="none"/>`;
 
-// Hand gripping the horizontal pen from above: palm, four fingers wrapping
-// over the body, and a thumb along the near side (so it reads as a hand, not
-// a coil, at pictogram scale).
+// Hand gripping the horizontal pen from above: palm, a unified rounded finger
+// mass curling down over the pen body (with crease lines, not separate
+// blocky bars), and a curved thumb wrapping the near side.
 const handH = (tipX, cy) => {
   const px = tipX - 106; // palm left edge sits over the body
   return `
-  <rect x="${px - 2}" y="${cy - 68}" width="72" height="52" rx="24" fill="${GRAY}" stroke="${INK}" stroke-width="5"/>
-  ${[0, 16, 32, 48].map((dx) =>
-    `<rect x="${px + 4 + dx}" y="${cy - 30}" width="13" height="48" rx="6.5" fill="${GRAY}" stroke="${INK}" stroke-width="4"/>`
-  ).join('')}
-  <rect x="${px - 14}" y="${cy - 14}" width="52" height="15" rx="7.5" fill="${GRAY}" stroke="${INK}" stroke-width="4"/>`;
+  <rect x="${px - 4}" y="${cy - 70}" width="72" height="50" rx="23" fill="${GRAY}" stroke="${INK}" stroke-width="5"/>
+  <path d="M${px} ${cy - 34} h64 q6 0 6 8 v34 q0 16 -16 16 h-44 q-16 0 -16 -16 v-34 q0 -8 6 -8 Z"
+        fill="${GRAY}" stroke="${INK}" stroke-width="5"/>
+  <path d="M${px + 16} ${cy - 26}v42M${px + 32} ${cy - 26}v46M${px + 48} ${cy - 26}v42"
+        stroke="${INK}" stroke-width="2.5" opacity="0.3" fill="none"/>
+  <path d="M${px - 14} ${cy - 6}q8 20 38 22" stroke="${GRAY}" stroke-width="16" fill="none" stroke-linecap="round"/>
+  <path d="M${px - 14} ${cy - 6}q8 20 38 22" stroke="${INK}" stroke-width="5" fill="none" stroke-linecap="round"/>`;
 };
 
-// Leg: tall rounded column on the right (outer mid-thigh), card-style.
+// Leg: tapered thigh silhouette on the right (outer mid-thigh) — wider at
+// the hip, a slight muscle bulge, narrowing toward the knee — with a subtle
+// knee-crease line. The left edge stays a flat vertical line at x=168 so the
+// device tip (always drawn ending at x=168) still lands exactly on the skin.
 const leg = () => `
-  <rect x="168" y="16" width="58" height="208" rx="29" fill="${GRAY}" stroke="${INK}" stroke-width="6"/>`;
+  <path d="M168 20 C168 12 176 8 190 8 C210 8 226 14 232 34 C238 58 236 82 230 100
+           C238 130 236 165 226 195 C220 214 210 226 194 228 C178 230 168 220 168 200 Z"
+        fill="${GRAY}" stroke="${INK}" stroke-width="6"/>
+  <path d="M172 188q26 10 54 2" stroke="${INK}" stroke-width="3" opacity="0.25" fill="none"/>`;
 
 // Black motion arrow (like the card's), pointing up at (x, from y1 to y2).
 const arrowUp = (x, y1, y2, cls = '') => `
