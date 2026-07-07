@@ -25,8 +25,9 @@ export const guides = {
     steps: [
       { headline: 'Confirm and grab it', subline: 'Facial swelling, hives, or trouble breathing', isHold: false, holdSeconds: 0, illustrationKey: 'aq-confirm' },
       { headline: 'Pull off the outer case', subline: 'The device will start talking you through it', isHold: false, holdSeconds: 0, illustrationKey: 'aq-case' },
-      { headline: 'Red end to outer thigh', subline: 'Never put your fingers on the red end', isHold: false, holdSeconds: 0, illustrationKey: 'aq-thigh' },
-      { headline: 'Press firmly — it clicks', subline: 'The needle is inside; keep pressing', isHold: false, holdSeconds: 0, illustrationKey: 'aq-press' },
+      { headline: 'Pull off the red safety guard', subline: 'It fits tight — pull firmly. Never touch the black end', isHold: false, holdSeconds: 0, illustrationKey: 'aq-guard' },
+      { headline: 'Black end to outer thigh', subline: 'Middle of the outer thigh; through clothing is fine', isHold: false, holdSeconds: 0, illustrationKey: 'aq-thigh' },
+      { headline: 'Press firmly — click and hiss', subline: 'That sound is normal; keep pressing', isHold: false, holdSeconds: 0, illustrationKey: 'aq-press' },
       { headline: 'Hold for 2 seconds', subline: 'Keep the device steady against the leg', isHold: true, holdSeconds: 2, illustrationKey: 'aq-hold' },
       { headline: 'Remove, then call 911', subline: 'Massage the site, note the time', isHold: false, holdSeconds: 0, illustrationKey: 'aq-remove' },
     ],
