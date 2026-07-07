@@ -46,32 +46,32 @@ const penH = (tipX, cy) => `
   <rect x="${tipX - 20}" y="${cy - 14}" width="20" height="28" rx="8" fill="${ORANGE}" stroke="${INK}" stroke-width="5"/>`;
 
 // ---- Hand (neutral gray, card-style fist) ------------------------------------
-// Fist wrapped around the vertical pen at cy: a rounded knuckle mass that
-// overlaps the pen's lower body (fingers curling over it), knuckle ridges,
-// finger-crease lines, and a tapered wrist below.
-const fistV = (cx, cy) => `
-  <path d="M${cx - 40} ${cy - 8} q-6 -30 22 -40 q18 -6 18 -6 q4 0 18 6 q28 10 22 40 q4 18 -6 30 q-12 14 -34 14 q-22 0 -34 -14 q-10 -12 -6 -30 Z"
-        fill="${GRAY}" stroke="${INK}" stroke-width="5"/>
-  <path d="M${cx - 20} ${cy + 26} q0 -10 14 -10 h12 q14 0 14 10 v42 q0 16 -16 16 h-8 q-16 0 -16 -16 Z"
-        fill="${GRAY}" stroke="${INK}" stroke-width="5"/>
-  <path d="M${cx - 26} ${cy - 40}q4-14 16-14t16 14M${cx} ${cy - 44}q4-15 17-15t17 15"
-        stroke="${INK}" stroke-width="3.5" opacity="0.4" fill="none"/>
-  <path d="M${cx - 20} ${cy - 24}v34M${cx} ${cy - 28}v40M${cx + 20} ${cy - 24}v34"
-        stroke="${INK}" stroke-width="2.5" opacity="0.3" fill="none"/>`;
-
-// Hand gripping the horizontal pen from above: palm, a unified rounded finger
-// mass curling down over the pen body (with crease lines, not separate
-// blocky bars), and a curved thumb wrapping the near side.
-const handH = (tipX, cy) => {
-  const px = tipX - 106; // palm left edge sits over the body
+// Fist wrapped around the vertical pen: ONE continuous tapered outline
+// (wide rounded knuckles narrowing to the wrist), same construction as the
+// leg. A single shape means there's no seam where separate pieces meet —
+// the earlier multi-piece version (palm + wrist as separate stroked shapes)
+// read as two stacked blobs instead of one hand.
+const fistV = (cx, cy) => {
+  const topY = cy - 56, botY = cy + 70;
+  const lt = cx - 38, rt = cx + 38, lb = cx - 14, rb = cx + 14;
   return `
-  <rect x="${px - 4}" y="${cy - 70}" width="72" height="50" rx="23" fill="${GRAY}" stroke="${INK}" stroke-width="5"/>
-  <path d="M${px} ${cy - 34} h64 q6 0 6 8 v34 q0 16 -16 16 h-44 q-16 0 -16 -16 v-34 q0 -8 6 -8 Z"
+  <path d="M${lt} ${topY + 30} Q${lt} ${topY} ${lt + 30} ${topY} L${rt - 30} ${topY} Q${rt} ${topY} ${rt} ${topY + 30}
+           L${rb} ${botY - 12} Q${rb} ${botY} ${rb - 12} ${botY} L${lb + 12} ${botY} Q${lb} ${botY} ${lb} ${botY - 12} Z"
         fill="${GRAY}" stroke="${INK}" stroke-width="5"/>
-  <path d="M${px + 16} ${cy - 26}v42M${px + 32} ${cy - 26}v46M${px + 48} ${cy - 26}v42"
+  <path d="M${cx - 18} ${topY + 20}v24M${cx} ${topY + 16}v28M${cx + 18} ${topY + 20}v24"
+        stroke="${INK}" stroke-width="2.5" opacity="0.3" fill="none"/>`;
+};
+
+// Hand gripping the horizontal pen from above: ONE single rounded shape
+// (no separate palm/finger pieces to create a seam), thin crease lines for
+// finger suggestion, and a simple curved stroke for the thumb.
+const handH = (tipX, cy) => {
+  const px = tipX - 106; // left edge sits over the body
+  return `
+  <rect x="${px - 4}" y="${cy - 70}" width="72" height="78" rx="26" fill="${GRAY}" stroke="${INK}" stroke-width="5"/>
+  <path d="M${px + 16} ${cy - 30}v30M${px + 32} ${cy - 34}v34M${px + 48} ${cy - 30}v30"
         stroke="${INK}" stroke-width="2.5" opacity="0.3" fill="none"/>
-  <path d="M${px - 14} ${cy - 6}q8 20 38 22" stroke="${GRAY}" stroke-width="16" fill="none" stroke-linecap="round"/>
-  <path d="M${px - 14} ${cy - 6}q8 20 38 22" stroke="${INK}" stroke-width="5" fill="none" stroke-linecap="round"/>`;
+  <path d="M${px - 10} ${cy - 8}q10 18 36 20" stroke="${INK}" stroke-width="5" fill="none"/>`;
 };
 
 // Leg: tapered thigh silhouette on the right (outer mid-thigh) — wider at
