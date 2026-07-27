@@ -78,31 +78,50 @@ function renderSignedOut() {
         Sign in so the network can reach you across sessions and devices.
       </p>
       <div id="oi-error" class="optin__error" hidden></div>
-      <button type="button" class="gsi" id="oi-google" style="margin-top:16px;">
-        ${gsiLabel('Sign in with Google')}
-      </button>
+      <div class="gsi-mount" id="oi-google" style="margin-top:16px;">
+        <button type="button" class="gsi" id="oi-google-fallback" aria-disabled="true">
+          ${gsiLabel('Loading Google…')}
+        </button>
+      </div>
     </div>
     <p class="optin__note">Volunteers are covered by Good Samaritan laws in all 50 states.</p>`);
 
-  root.querySelector('#oi-google').addEventListener('click', async (e) => {
-    const btn = e.currentTarget;
-    btn.setAttribute('aria-disabled', 'true');
-    btn.innerHTML = gsiLabel('Opening Google…');
-    try {
-      const n = await net();
-      await n.signInWithGoogle(); // navigates away; nothing runs after this on success
-    } catch (err) {
-      btn.removeAttribute('aria-disabled');
-      btn.innerHTML = gsiLabel('Sign in with Google');
-      showError(friendly(err));
-    }
-  });
+  // Google Identity Services renders its own button here, which hands us an ID
+  // token in-page (no redirect through the *.supabase.co URL). The placeholder
+  // above is replaced on success, or turned into a retry if Google can't load.
+  mountGoogleButton();
+}
+
+async function mountGoogleButton() {
+  const mount = root.querySelector('#oi-google');
+  if (!mount) return;
+  try {
+    const n = await net();
+    await n.renderGoogleSignIn(mount, {
+      onSignedIn: () => refresh(),
+      onError: (err) => showError(friendly(err)),
+    });
+  } catch (err) {
+    // Couldn't load GIS — offer a retry rather than a dead button.
+    if (!root.querySelector('#oi-google')) return;
+    mount.innerHTML = `<button type="button" class="gsi" id="oi-google-retry">
+      ${gsiLabel('Retry Google sign-in')}
+    </button>`;
+    showError(friendly(err));
+    mount.querySelector('#oi-google-retry')
+      .addEventListener('click', () => { hideError(); mountGoogleButton(); });
+  }
 }
 
 function showError(msg) {
   const el = root.querySelector('#oi-error');
   if (!el) return;
   el.textContent = msg; el.hidden = false;
+}
+
+function hideError() {
+  const el = root.querySelector('#oi-error');
+  if (el) { el.textContent = ''; el.hidden = true; }
 }
 
 function friendly(e) {

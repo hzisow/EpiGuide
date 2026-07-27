@@ -834,6 +834,10 @@
 .gsi[aria-disabled="true"] { opacity: 0.6; pointer-events: none; }
 .gsi__logo { flex: 0 0 auto; }
 .gsi__text { white-space: nowrap; }
+/* Google Identity Services renders its own <div>/iframe button in here; centre
+   it and give it the same footprint as the .gsi placeholder it replaces. */
+.gsi-mount { display: flex; justify-content: center; min-height: 44px; }
+.gsi-mount > div { max-width: 100%; }
 
 /* ── Scroll fixes ──────────────────────────────────────────────────────────
    .screen is a flex column with overflow:hidden, and each screen's flex:1

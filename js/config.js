@@ -7,6 +7,13 @@
 
 export const SUPABASE_URL = 'https://lpgrbpblbtpyigzsrhgu.supabase.co';
 export const SUPABASE_KEY = 'sb_publishable_jAc0WYHL4B5fBBPGy1FPRA_DWsIMgWd';
+
+// Google OAuth *Web* client ID, used by Google Identity Services to mint an ID
+// token in-page. Public by design (it ships in page source); the client SECRET
+// lives only in the Supabase dashboard. Sign-in shows google.com and returns
+// here — the *.supabase.co URL is never displayed.
+export const GOOGLE_CLIENT_ID =
+  '745503193120-epsbpgpiabrr7ps0cr4rajs706lmgmvs.apps.googleusercontent.com';
 export const VAPID_PUBLIC_KEY =
   'BAFx20w3cXxSsrklTvohW0N6UlsJRc5Hzm9p_wtROWm4FdIGuoHUatGPQq2Ex0Ak1HfBQbxspKfFh6sZIm1K-jU';
 

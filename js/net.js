@@ -8,28 +8,92 @@
 // to any CDN outage.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY, APPROX_DECIMALS } from './config.js';
+import {
+  SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY, APPROX_DECIMALS, GOOGLE_CLIENT_ID,
+} from './config.js';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  // detectSessionInUrl lets the client finish a Google sign-in: when the OAuth
-  // redirect lands back on the app, creating this client consumes the tokens
-  // from the URL and cleans it up.
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+  // detectSessionInUrl is off: sign-in no longer round-trips through a redirect,
+  // so no tokens ever arrive in the URL for the client to consume.
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
 });
 
 // ---------------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------------
 
-// Kicks off the Google OAuth redirect. On success the browser navigates away to
-// Google and comes back to this page with a session in the URL, so nothing
-// meaningful runs after the await — the reloaded app picks the session up.
-export async function signInWithGoogle() {
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo: location.origin + location.pathname },
+// Google sign-in via Google Identity Services (GIS), NOT signInWithOAuth.
+//
+// signInWithOAuth does a full-page redirect through
+// https://<ref>.supabase.co/auth/v1/authorize, so Google's account chooser says
+// "to continue to <ref>.supabase.co" and the user visibly lands on the Supabase
+// project URL. Instead we render Google's own button; Google returns an ID token
+// *in the page*, and we exchange it for a Supabase session with
+// signInWithIdToken. No redirect, so the supabase.co URL is never shown.
+
+const GIS_SRC = 'https://accounts.google.com/gsi/client';
+let gisPromise = null;
+
+function loadGis() {
+  if (window.google?.accounts?.id) return Promise.resolve();
+  return (gisPromise ||= new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${GIS_SRC}"]`);
+    const script = existing || document.createElement('script');
+    const timer = setTimeout(() => {
+      gisPromise = null;
+      reject(new Error("Couldn't reach Google sign-in. Check your connection."));
+    }, 10000);
+    script.addEventListener('load', () => { clearTimeout(timer); resolve(); });
+    script.addEventListener('error', () => {
+      clearTimeout(timer); gisPromise = null;
+      reject(new Error("Couldn't load Google sign-in."));
+    });
+    if (!existing) {
+      script.src = GIS_SRC;
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+    }
+  }));
+}
+
+// Renders Google's official button into `container`. `onSignedIn` fires after
+// the Supabase session exists; `onError` receives any failure.
+export async function renderGoogleSignIn(container, { onSignedIn, onError } = {}) {
+  await loadGis();
+  const gid = window.google?.accounts?.id;
+  if (!gid) throw new Error("Couldn't load Google sign-in.");
+
+  gid.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    auto_select: false,
+    cancel_on_tap_outside: true,
+    use_fedcm_for_prompt: true,
+    callback: async (response) => {
+      try {
+        if (!response?.credential) throw new Error('No credential returned from Google.');
+        const { error } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: response.credential,
+        });
+        if (error) throw error;
+        onSignedIn?.();
+      } catch (err) {
+        onError?.(err);
+      }
+    },
   });
-  if (error) throw error;
+
+  container.innerHTML = '';
+  gid.renderButton(container, {
+    type: 'standard',
+    theme: 'outline',
+    size: 'large',
+    text: 'signin_with',
+    shape: 'rectangular',
+    logo_alignment: 'left',
+    width: Math.max(200, Math.min(400, Math.floor(container.clientWidth || 320))),
+  });
 }
 
 export async function signOut() {
