@@ -245,6 +245,122 @@ export async function showLocalNotification({ title, body, alertId }) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// EpiPen expiry reminders — future-dated LOCAL notifications
+// ---------------------------------------------------------------------------
+//
+// The app promises "we'll remind you before a pen expires". On the web that
+// promise has no mechanism (a scheduled web push needs a server-side job that
+// does not exist), so the web copy no longer makes it. Here it is real:
+// LocalNotifications.schedule() with `schedule.at` hands iOS a
+// UNTimeIntervalNotificationTrigger, which fires whether or not the app is
+// running.
+//
+// Ids are DERIVED FROM THE PEN, not random: scheduling the same id again
+// replaces the pending notification, so re-syncing after every add/edit can
+// never stack duplicate reminders for one pen.
+
+const PEN_REMINDER_KIND = 'epiguide-pen-expiry';
+/** Slot 0 = a month of warning (time to get a new prescription). Slot 1 = the day. */
+const PEN_REMINDER_DAYS_BEFORE = [30, 0];
+const PEN_REMINDER_HOUR = 9; // local morning, not the middle of the night
+
+// FNV-1a. Any stable 32-bit hash would do; this one is 6 lines and dependency-free.
+function hash32(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+// iOS requires a 32-bit int id. Bucketing the hash to 2e8 and reserving the last
+// digit for the slot keeps the result under 2^31-1 with room to spare.
+function penReminderId(penId, slot) {
+  return 1 + (hash32(String(penId)) % 200000000) * 10 + slot;
+}
+
+function penReminderDate(expirationDate, daysBefore) {
+  const at = new Date(`${expirationDate}T00:00:00`);
+  if (Number.isNaN(at.getTime())) return null;
+  at.setDate(at.getDate() - daysBefore);
+  at.setHours(PEN_REMINDER_HOUR, 0, 0, 0);
+  return at;
+}
+
+/**
+ * Native-only: make the scheduled reminders match `pens` exactly.
+ *
+ * @param pens  [{ id, expiration_date: 'YYYY-MM-DD', label }]
+ * @param requestPermission  true only on an explicit user action (saving a pen).
+ *        A background refresh must never trigger the iOS permission alert.
+ * @returns true if reminders are now in sync, false if nothing could be done
+ *          (web, no plugin, or notifications not granted).
+ */
+export async function syncPenExpiryReminders(pens, { requestPermission = false } = {}) {
+  const LN = getPlugin('LocalNotifications');
+  if (!LN) return false;
+
+  let granted = false;
+  try {
+    const status = await LN.checkPermissions();
+    granted = status?.display === 'granted';
+    if (!granted && requestPermission) granted = await requestNativeNotificationPermission();
+  } catch (e) {
+    console.warn('Pen reminder permission check failed:', e);
+    return false;
+  }
+  if (!granted) return false;
+
+  const now = Date.now();
+  const wanted = [];
+  for (const pen of pens || []) {
+    if (!pen || !pen.id || !pen.expiration_date) continue;
+    PEN_REMINDER_DAYS_BEFORE.forEach((daysBefore, slot) => {
+      const at = penReminderDate(pen.expiration_date, daysBefore);
+      // iOS rejects the whole schedule() call if any date is in the past, so a
+      // reminder whose moment has already gone is simply dropped.
+      if (!at || at.getTime() <= now + 1000) return;
+      wanted.push({ id: penReminderId(pen.id, slot), at, daysBefore, pen });
+    });
+  }
+
+  // Cancel reminders for pens that were deleted or re-dated. Only ours: the
+  // filter is on our own `extra.kind`, so an unrelated notification is untouched.
+  try {
+    const pending = await LN.getPending();
+    const keep = new Set(wanted.map((w) => w.id));
+    const stale = (pending?.notifications || [])
+      .filter((n) => n?.extra?.kind === PEN_REMINDER_KIND && !keep.has(Number(n.id)))
+      .map((n) => ({ id: Number(n.id) }));
+    if (stale.length) await LN.cancel({ notifications: stale });
+  } catch (e) {
+    console.warn('Pen reminder cleanup failed:', e);
+  }
+
+  if (!wanted.length) return true;
+  try {
+    await LN.schedule({
+      notifications: wanted.map((w) => ({
+        id: w.id,
+        // Use the pen's own brand — an Auvi-Q owner should not be told their
+        // "EpiPen" expires.
+        title: `${w.pen.label || 'Your auto-injector'} expires ${w.daysBefore === 0 ? 'today' : 'in a month'}`,
+        body: `${w.pen.label || 'Your auto-injector'} expires ${w.pen.expiration_date}.`
+          + (w.daysBefore === 0 ? ' Replace it today.' : ' Ask for a replacement prescription now.'),
+        sound: 'default',
+        schedule: { at: w.at, allowWhileIdle: true },
+        extra: { kind: PEN_REMINDER_KIND, pen_id: String(w.pen.id) },
+      })),
+    });
+    return true;
+  } catch (e) {
+    console.warn('Scheduling pen expiry reminders failed:', e);
+    return false;
+  }
+}
+
 // The ONE "a notification was tapped, open this alert" sink. Both the local
 // notification listener below and the APNs listener further down feed it, so
 // there is a single route into the app rather than two divergent ones.

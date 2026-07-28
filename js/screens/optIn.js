@@ -195,8 +195,8 @@ async function renderSignedIn(user) {
 
     <button class="btn btn--ghost" id="oi-signout" style="margin:4px auto 0;display:block;">Sign out</button>
     <p class="optin__note">${isNative()
-      ? `We'll remind you before a pen expires. <strong>Closed-app alerts aren't active on iOS yet</strong> — you'll be alerted while EpiGuide is open. Turning off availability stops alerts.`
-      : `We'll remind you before a pen expires. Alerts reach you even with the app closed once you allow notifications; turning off availability stops them.`}</p>`);
+      ? `Once you allow notifications, we'll remind you 30 days before a pen expires and again on the day. <strong>Closed-app emergency alerts aren't active on iOS yet</strong> — you'll be alerted while EpiGuide is open. Turning off availability stops alerts.`
+      : `Your pens' expiry dates are tracked here, but this browser can't schedule a reminder — check back yourself. Emergency alerts reach you even with the app closed once you allow notifications; turning off availability stops them.`}</p>`);
 
   // Mount the EpiPen inventory (scan a pen, track expirations). Saving a pen
   // also updates the availability profile above (what you carry).
