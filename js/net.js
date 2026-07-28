@@ -225,8 +225,16 @@ function coarse(v) {
 }
 
 // Alerting radius — a volunteer farther than this can't bring a pen in time, so
-// they aren't alerted. 4.5 miles ≈ 7242 m. Mirrors the server-side push fan-out.
-export const ALERT_RADIUS_M = 7242;
+// they aren't alerted. 0.4 miles ≈ 644 m: roughly an 8-minute walk, inside the
+// window where epinephrine still changes the outcome.
+//
+// This filter runs on EXACT coordinates on both sides (the raiser's position
+// from getPosition(), and the responder's own from goAvailable()), so it is
+// accurate at this scale. Note the public `responders` table is deliberately
+// coarsened to APPROX_DECIMALS (~1.1 km), which is COARSER than this radius —
+// so any server-side fan-out reading that table cannot filter this tightly and
+// must use `responder_locations` instead.
+export const ALERT_RADIUS_M = 644;
 
 export function haversineMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000;

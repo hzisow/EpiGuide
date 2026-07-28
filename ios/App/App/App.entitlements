@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Time Sensitive notifications: lets a responder alert break through Focus
+	  and Do Not Disturb. Self-serve entitlement — no Apple approval needed.
+	  Without this key iOS silently downgrades interruptionLevel:'timeSensitive'
+	  to 'active', so the alert would just queue behind Focus.
+	-->
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
+
+	<!--
+	  NOT YET ENABLED, both deliberately:
+
+	  aps-environment — required for APNs closed-app alerts. Add
+	    <key>aps-environment</key><string>development</string>
+	  once the Apple Developer enrolment completes and the App ID has the Push
+	  Notifications capability. Adding it before then breaks device signing.
+
+	  com.apple.developer.usernotifications.critical-alerts — overrides the mute
+	  switch and Do Not Disturb (the closest iOS equivalent to an AMBER alert).
+	  Granted only by individual application to Apple. When approved, add the key
+	  here AND flip CRITICAL_ALERTS_APPROVED in js/native.js. Claiming it without
+	  the entitlement makes iOS drop the notification entirely.
+	-->
+</dict>
+</plist>

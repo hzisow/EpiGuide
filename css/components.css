@@ -223,16 +223,36 @@
    including full-screen modals — nothing hides it. */
 .tabbar {
   position: absolute;
-  left: var(--space-4); right: var(--space-4);
+  left: var(--tabbar-inset); right: var(--tabbar-inset);
   bottom: max(var(--space-4), env(safe-area-inset-bottom));
   z-index: 40;
   display: none;
   gap: var(--space-1);
   padding: 6px;
-  border-radius: var(--radius-pill);
-  background: var(--color-white);
-  border: 1px solid var(--color-gray-divider);
-  box-shadow: 0 8px 28px rgba(17, 24, 39, 0.14);
+  /* Concentric with the physical bezel: a rounded rectangle inset from a
+     rounded corner stays visually parallel only when its radius is the outer
+     radius minus the inset. min() keeps it from exceeding a full pill on short
+     bars (CSS would clamp anyway, but this states the intent). */
+  border-radius: min(
+    var(--radius-pill),
+    calc(var(--device-corner-radius) - var(--tabbar-inset))
+  );
+  /* Translucent material rather than flat white, so content scrolling beneath
+     shows through the way UITabBar does. */
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 0.5px solid rgba(17, 24, 39, 0.10);   /* iOS hairline */
+  /* Two layers: a tight contact shadow plus a soft ambient one. */
+  box-shadow:
+    0 1px 2px rgba(17, 24, 39, 0.06),
+    0 8px 28px rgba(17, 24, 39, 0.14);
+}
+
+/* Safari/WKWebView drops the element behind an un-blurred backdrop if the
+   filter is unsupported — fall back to opaque so the bar never goes muddy. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .tabbar { background: var(--color-white); }
 }
 .tabbar--visible { display: flex; }
 .tab {
@@ -252,6 +272,9 @@
 }
 .tab svg { width: 24px; height: 24px; }
 .tab[aria-selected="true"] { color: var(--color-red-dark); background: rgba(224, 49, 49, 0.10); }
+/* iOS-style press feedback: a brief inward scale, skipped under reduced motion. */
+.tab:active { transform: scale(0.94); }
+@media (prefers-reduced-motion: reduce) { .tab:active { transform: none; } }
 
 /* ============================================================
    List row (Medic handoff summary)

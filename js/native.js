@@ -203,6 +203,23 @@ export async function requestNativeNotificationPermission() {
   }
 }
 
+// How hard a responder alert is allowed to interrupt.
+//
+//   timeSensitive — breaks through Focus and Do Not Disturb and lights the
+//     screen. The entitlement is self-serve (Xcode capability), so this works
+//     today and is what we ship.
+//   critical      — additionally overrides the ringer/mute switch and plays at
+//     full volume, i.e. the closest iOS gets to an AMBER-style alert. It needs
+//     Apple's Critical Alerts entitlement, which is granted only on individual
+//     application and human review.
+//
+// Set CRITICAL_ALERTS_APPROVED to true ONLY once that entitlement is actually
+// present in the provisioning profile. Claiming `critical` without it makes iOS
+// reject the notification outright — which would mean a responder alert that
+// silently never appears, strictly worse than the timeSensitive we have now.
+const CRITICAL_ALERTS_APPROVED = false;
+const ALERT_INTERRUPTION_LEVEL = CRITICAL_ALERTS_APPROVED ? 'critical' : 'timeSensitive';
+
 /** Native-only: fire an immediate local notification. Safe to await-and-ignore. */
 export async function showLocalNotification({ title, body, alertId }) {
   const LN = getPlugin('LocalNotifications');
@@ -215,6 +232,10 @@ export async function showLocalNotification({ title, body, alertId }) {
         title,
         body,
         sound: 'default',
+        interruptionLevel: ALERT_INTERRUPTION_LEVEL,
+        // Keep it on screen until acted on, matching the web push handler's
+        // requireInteraction — a responder alert should not auto-dismiss.
+        ongoing: false,
         extra: { alert_id: alertId || '' },
       }],
     });

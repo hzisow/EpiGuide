@@ -29,6 +29,12 @@
   --radius-xl: 24px;
   --radius-pill: 999px;
 
+  /* Physical display corner radius of modern iPhones (~55pt), used to keep
+     floating chrome concentric with the bezel. On a square-cornered viewport
+     the inset chrome just clamps to its own pill radius, so this is inert. */
+  --device-corner-radius: 55px;
+  --tabbar-inset: 16px;
+
   /* Elevation */
   --shadow-card: 0 2px 8px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
   --shadow-elevated: 0 8px 24px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.06);
