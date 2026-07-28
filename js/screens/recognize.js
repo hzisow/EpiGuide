@@ -49,6 +49,7 @@ export function initRecognize() {
   logIncidentEventOnce('start', 'Symptom check started');
   // Reset per-visit UI + vision state.
   state.recognize.result = null;
+  state.recognize.revealed = false;
   facingMode = 'environment';
   seenFrames = 0;
   lastFaceBox = null;
@@ -207,8 +208,9 @@ async function flipCamera() {
 
   // If a result had already been revealed, don't leave a stale read on
   // screen for the new camera view — go back to scanning honestly.
-  if (state.recognize.result === 'match') {
+  if (state.recognize.revealed) {
     state.recognize.result = null;
+    state.recognize.revealed = false;
     sheetEl.hidden = true;
     sheetEl.innerHTML = '';
     startBadgeCycle();
@@ -333,7 +335,7 @@ function drawFaceOverlay(pts, box, reading) {
   drawBrackets(box);
 
   // Scanning sweep while we're still accumulating evidence.
-  if (state.recognize.result !== 'match' && readyFrames < SCAN_FRAMES) {
+  if (!state.recognize.revealed && readyFrames < SCAN_FRAMES) {
     const t = (performance.now() % 2200) / 2200;
     const y = box.y + box.h * (t < 0.5 ? t * 2 : 2 - t * 2);
     const grad = ctx.createLinearGradient(box.x, 0, box.x + box.w, 0);
@@ -499,13 +501,16 @@ function summarizeVision() {
 }
 
 function reveal() {
-  if (state.recognize.result === 'match') return; // already revealed
+  if (state.recognize.revealed) return; // already revealed
   clearTimeout(revealTimer);
   if (badgeTimer) { clearInterval(badgeTimer); badgeTimer = null; }
   badgesEl.innerHTML = '';
-  state.recognize.result = 'match';
+  state.recognize.revealed = true;
 
   const v = summarizeVision();
+  // Record the verdict the scan ACTUALLY reached. `v.any` false means nothing
+  // was seen, which must not be reported downstream as a positive finding.
+  state.recognize.result = v.any ? 'match' : 'noMatch';
   const result = scoreWithSafetyOverride(v.modelState);
   const debug = isDebugMode() ? debugPanelHTML(result) + visionDebugHTML(v) : '';
 
