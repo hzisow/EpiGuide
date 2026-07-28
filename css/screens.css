@@ -1019,3 +1019,40 @@
   /* Checklist: tighten the header so more rows fit above the verdict card. */
   .checklist__head { padding-top: max(var(--space-3), calc(env(safe-area-inset-top) + var(--space-1))); }
 }
+
+/* ── Find: action-first triage (pre-location) ───────────────────────────────
+   Replaces the old permission-gate hero. Every row is reachable with no
+   permission granted; only the third one asks for location, and it says why
+   inline rather than behind a separate explainer card. */
+.triage { display: flex; flex-direction: column; gap: var(--space-3); width: 100%; }
+.triage__act {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+  text-align: left;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-gray-divider);
+  background: var(--color-white);
+  color: var(--color-ink);
+  text-decoration: none;
+  transition: transform var(--duration-base) var(--ease-out);
+}
+.triage__act:active { transform: scale(0.985); }
+@media (prefers-reduced-motion: reduce) { .triage__act:active { transform: none; } }
+.triage__act .icon { flex: 0 0 auto; width: 24px; height: 24px; margin-top: 1px; }
+.triage__act span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.triage__act strong { font-size: 17px; font-weight: 700; line-height: 1.25; }
+.triage__act small { font-size: 13px; line-height: 1.4; color: var(--color-gray-text); }
+
+/* The emergency path is the visual priority; calling 911 is the second. */
+.triage__act--urgent {
+  background: var(--color-red);
+  border-color: var(--color-red);
+  color: #fff;
+  box-shadow: var(--shadow-card);
+}
+.triage__act--urgent small { color: rgba(255,255,255,0.82); }
+.triage__act--call { border-color: rgba(224,49,49,0.35); color: var(--color-red-dark); }
+.triage__act--call small { color: var(--color-gray-text); }
