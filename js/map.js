@@ -6,6 +6,8 @@
 // ~300 m scale we render at; markers land in the right relative direction and
 // distance from the user.
 
+import { isNative } from './native.js';
+
 const METERS_PER_DEG_LAT = 111320;
 
 export function metersPerDegLng(lat) {
@@ -79,6 +81,35 @@ export async function reverseGeocode(lat, lng) {
   } catch (_) {
     return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Turn-by-turn hand-off
+// ---------------------------------------------------------------------------
+
+/**
+ * Open real turn-by-turn directions to `lat,lng` in the device's maps app.
+ *
+ * NATIVE: assigning a `maps:` URL to window.location is a top-level navigation
+ * to a non-application scheme. Capacitor's WKNavigationDelegate
+ * (WebViewDelegationHandler.decidePolicyFor) cancels exactly those and hands
+ * them to UIApplication.shared.open, which launches Apple Maps — so this
+ * escapes the webview without any extra plugin. It must NOT go through
+ * installExternalLinkHandler()/Browser.open: that is an in-app Safari view and
+ * would render a web page instead of starting navigation. dirflg=w is walking,
+ * which is what a volunteer inside a 644 m radius is actually doing.
+ *
+ * WEB: a normal new tab, which hands off to the OS maps app on a phone.
+ */
+export function openDirections(lat, lng) {
+  if (isNative()) {
+    window.location.href = `maps://?daddr=${lat},${lng}&dirflg=w`;
+    return;
+  }
+  window.open(
+    `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=walking`,
+    '_blank', 'noopener',
+  );
 }
 
 // Mount (or update) a Google Maps iframe inside `container`. Returns the iframe.
