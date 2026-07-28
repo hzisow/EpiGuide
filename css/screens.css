@@ -810,6 +810,8 @@
 .vol-list:empty { margin: 0; }
 .vol-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--color-gray-bg); border-radius: var(--radius-sm); }
 .vol-row__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-green); flex: 0 0 auto; }
+/* "Nobody is coming — call 911". Must not read as ordinary muted body copy. */
+.vol-status--urgent { color: var(--color-red-dark); font-weight: 600; }
 
 .btn--vol { margin-top: 14px; background: var(--color-blue); color: #fff; }
 .btn--vol:active { background: #1971C2; }

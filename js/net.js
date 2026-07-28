@@ -246,6 +246,58 @@ export function haversineMeters(lat1, lng1, lat2, lng2) {
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
+// Worst-case distance between a responder's REAL position and the coarsened one
+// published in the `responders` table. Snapping to APPROX_DECIMALS (2 dp) moves a
+// point by up to half a grid cell in each axis, i.e. ~0.79 km at the equator.
+// Anything comparing against those public coordinates has to widen its radius by
+// this much or it will wrongly conclude that a genuinely close volunteer is out
+// of range.
+export function approxGridErrorMeters(lat) {
+  const halfCellDeg = 0.5 * 10 ** -APPROX_DECIMALS;
+  const dLat = halfCellDeg * 111320;
+  const dLng = halfCellDeg * 111320 * Math.cos((lat * Math.PI) / 180);
+  return Math.hypot(dLat, dLng);
+}
+
+/**
+ * Patient-side, best-effort answer to "is any volunteer actually in range?".
+ *
+ * This can only read the PUBLIC `responders` table, whose coordinates are
+ * coarsened to a ~1.1 km grid — coarser than ALERT_RADIUS_M itself. So the
+ * radius is widened by approxGridErrorMeters() and the answer is APPROXIMATE by
+ * construction; callers must say so and must never present it as a precise
+ * count of who is nearby. (The server-side fan-out in the notify-responders
+ * Edge Function reads exact coordinates from `responder_locations` and is the
+ * authoritative check — this is the fallback for when that answer isn't
+ * available, e.g. an anonymous raiser who can't invoke the function.)
+ *
+ * Returns { status, count, radiusM }:
+ *   'some'    — at least one available volunteer is plausibly within range
+ *   'none'    — no available volunteer is VISIBLE to us near here. Note this is
+ *               also what RLS returns if it declines to show other people's
+ *               rows, which is exactly why the copy says "none showing as
+ *               available" rather than "nobody is there".
+ *   'unknown' — the query failed; we know nothing either way.
+ */
+export async function availabilityNear(lat, lng) {
+  const radiusM = ALERT_RADIUS_M + approxGridErrorMeters(lat);
+  let selfId = null;
+  try { selfId = (await currentUser())?.id || null; } catch (_) {}
+
+  const { data, error } = await supabase.from('responders')
+    .select('user_id,approx_lat,approx_lng')
+    .eq('is_available', true);
+  if (error || !Array.isArray(data)) return { status: 'unknown', count: 0, radiusM };
+
+  const count = data.reduce((acc, r) => {
+    if (selfId && r.user_id === selfId) return acc;      // don't count the raiser
+    const rlat = Number(r.approx_lat), rlng = Number(r.approx_lng);
+    if (!Number.isFinite(rlat) || !Number.isFinite(rlng)) return acc;
+    return haversineMeters(lat, lng, rlat, rlng) <= radiusM ? acc + 1 : acc;
+  }, 0);
+  return { status: count > 0 ? 'some' : 'none', count, radiusM };
+}
+
 // ---------------------------------------------------------------------------
 // Responder profile + availability
 // ---------------------------------------------------------------------------
@@ -447,11 +499,18 @@ export async function raiseAlert({ lat, lng, note }) {
   if (error) throw error;
 
   const alert = { ...row, created_at: new Date().toISOString() };
-  // Fan out web push to nearby available responders (server-side proximity).
-  // If this fails (e.g. anon can't invoke the function), the alert is still
-  // live and open-app responders receive it via realtime.
+  // Fan out push to nearby available responders (server-side proximity, exact
+  // coordinates). If this fails (e.g. anon can't invoke the function), the alert
+  // is still live and open-app responders receive it via realtime.
+  //
+  // The RESULT is kept: it is the only authoritative answer to "did this alert
+  // actually reach anybody?", which the UI needs so it never implies help is
+  // coming when nothing was reached. `null` means we don't know.
+  alert.fanout = null;
   try {
-    await supabase.functions.invoke('notify-responders', { body: { alert_id: alert.id } });
+    const { data, error } = await supabase.functions.invoke('notify-responders', { body: { alert_id: alert.id } });
+    if (error) throw error;
+    alert.fanout = data || null;
   } catch (e) {
     console.warn('notify-responders failed (alert still live for open apps):', e);
   }
