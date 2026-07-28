@@ -1,0 +1,259 @@
+name: iOS
+
+# Cloud builds so the Mac can be off.
+#
+# Two jobs:
+#   simulator — always runs. No code signing, so it works TODAY, before the
+#               Apple Developer Program enrolment completes.
+#   testflight — signed archive + upload. Skips itself automatically until the
+#               secrets listed below exist, so adding them is the only step
+#               needed to turn it on.
+
+on:
+  push:
+    branches: [ios-app]
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Unsigned simulator build — the pre-enrolment safety net.
+  # ---------------------------------------------------------------------------
+  simulator:
+    name: Build (simulator, unsigned)
+    runs-on: macos-15
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Capacitor 8's CLI requires Node >= 20.19 / >= 22. The repo's local dev
+      # Node is 20, which is why this is pinned explicitly rather than inherited.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # package-lock.json IS committed, so `npm ci` is the reproducible path.
+      # The fallback exists only so a future lockfile-less state fails soft
+      # instead of breaking every build.
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            echo "::warning::No package-lock.json found — falling back to npm install"
+            npm install
+          fi
+
+      # `npm run build` = scripts/sync-www.mjs, which mirrors the repo root into
+      # www/ (webDir). www/ is gitignored, so this must run before cap sync.
+      - name: Build web assets and sync Capacitor
+        run: |
+          npm run build
+          npx cap sync ios
+
+      - name: Show selected Xcode
+        run: xcodebuild -version
+
+      # CODE_SIGNING_ALLOWED=NO is what makes this work with no Apple Developer
+      # account: the simulator does not verify signatures, and the project's
+      # CODE_SIGN_STYLE=Automatic would otherwise demand a team.
+      #
+      # NOTE (local-only quirk, do NOT replicate here): this project needed
+      #   xcrun simctl runtime match set iphoneos26.5 23E244 --sdkBuild 23F81a
+      # on the developer's Mac because its installed simulator runtime and iOS
+      # SDK had drifted apart. A clean GitHub runner ships a matched SDK and
+      # runtime pair, so that command is unnecessary — and pinning those exact
+      # build numbers here would break the moment the runner image updates.
+      - name: Build for simulator (no signing)
+        run: |
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Upload .app
+        uses: actions/upload-artifact@v4
+        with:
+          name: EpiGuide-simulator-app
+          path: build/DerivedData/Build/Products/Debug-iphonesimulator/App.app
+          if-no-files-found: warn
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Signed archive + TestFlight. Dormant until the secrets exist.
+  # ---------------------------------------------------------------------------
+  #
+  # REQUIRED REPOSITORY SECRETS (Settings > Secrets and variables > Actions):
+  #
+  #   ASC_KEY_ID          App Store Connect API key id (10 chars). From
+  #                       App Store Connect > Users and Access > Integrations >
+  #                       App Store Connect API. Role: App Manager or Admin.
+  #   ASC_ISSUER_ID       Issuer ID (a UUID) shown on that same page. One per
+  #                       team, not per key.
+  #   ASC_KEY_P8          Full contents of the AuthKey_<ASC_KEY_ID>.p8 file,
+  #                       BEGIN/END lines included. Downloadable exactly once.
+  #   IOS_DIST_CERT_P12   Apple Distribution certificate + private key exported
+  #                       from Keychain Access as .p12, then base64 encoded:
+  #                         base64 -i dist.p12 | pbcopy
+  #   IOS_DIST_CERT_PASSWORD  The password set during that .p12 export.
+  #   IOS_PROVISIONING_PROFILE  App Store provisioning profile for
+  #                       com.epiguide.app, base64 encoded:
+  #                         base64 -i EpiGuide.mobileprovision | pbcopy
+  #                       Regenerate this AFTER adding the Push Notifications
+  #                       capability, or the aps-environment entitlement will
+  #                       not be in the profile and the archive will fail.
+  #   APPLE_TEAM_ID       10-char Apple Developer Team ID.
+  #
+  # The `if:` below reads secrets through an env var because secrets cannot be
+  # referenced directly in a job-level conditional. With none set, this job is
+  # skipped and the workflow still passes.
+  testflight:
+    name: Archive and upload to TestFlight
+    needs: simulator
+    runs-on: macos-15
+    timeout-minutes: 60
+    if: ${{ github.ref == 'refs/heads/ios-app' }}
+    env:
+      HAS_SIGNING_SECRETS: ${{ secrets.ASC_KEY_ID != '' && secrets.ASC_ISSUER_ID != '' && secrets.ASC_KEY_P8 != '' && secrets.IOS_DIST_CERT_P12 != '' && secrets.IOS_PROVISIONING_PROFILE != '' }}
+
+    steps:
+      - name: Check for signing secrets
+        id: gate
+        run: |
+          if [ "$HAS_SIGNING_SECRETS" = "true" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Signing secrets not configured — skipping the TestFlight upload. See .github/workflows/ios.yml for the list."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.ready == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+      - name: Build web assets and sync Capacitor
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          npm run build
+          npx cap sync ios
+
+      # Import the distribution certificate into a throwaway keychain and drop
+      # the provisioning profile where Xcode looks for it.
+      - name: Install signing assets
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          IOS_DIST_CERT_P12: ${{ secrets.IOS_DIST_CERT_P12 }}
+          IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          IOS_PROVISIONING_PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/build.keychain"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+
+          echo "$IOS_DIST_CERT_P12" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security import "$RUNNER_TEMP/dist.p12" -k "$KEYCHAIN" \
+            -P "$IOS_DIST_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          # Lets codesign use the key without an interactive prompt.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+
+          PROFILES="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILES"
+          echo "$IOS_PROVISIONING_PROFILE" | base64 --decode > "$PROFILES/build.mobileprovision"
+
+          rm -f "$RUNNER_TEMP/dist.p12"
+
+      # The App Store Connect API key authenticates the upload — no
+      # Apple ID, no app-specific password, no 2FA prompt.
+      - name: Install App Store Connect API key
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          mkdir -p ~/private_keys
+          echo "$ASC_KEY_P8" > ~/private_keys/AuthKey_${ASC_KEY_ID}.p8
+
+      - name: Archive
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            archive
+
+      - name: Export IPA
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>uploadSymbols</key><true/>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -authenticationKeyPath ~/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+      - name: Upload to TestFlight
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          IPA="$(find "$RUNNER_TEMP/export" -name '*.ipa' -maxdepth 1 | head -1)"
+          if [ -z "$IPA" ]; then echo "::error::No .ipa produced"; exit 1; fi
+          xcrun altool --upload-app -f "$IPA" -t ios \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+
+      - name: Clean up secrets from the runner
+        if: always() && steps.gate.outputs.ready == 'true'
+        run: |
+          rm -rf ~/private_keys
+          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/build.mobileprovision"
+          security delete-keychain "$RUNNER_TEMP/build.keychain" || true

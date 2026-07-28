@@ -372,9 +372,32 @@ export const NATIVE_PUSH_NOTICE =
 export function pushSupported() {
   // A Capacitor WKWebView has no PushManager and no VAPID web push at all, so
   // report the truth rather than letting the caller hide a guaranteed failure.
-  // Real closed-app alerts here need APNs — see the TODO(APNs) in js/native.js.
+  // Closed-app alerts on iOS go through APNs instead — see the APNs section of
+  // js/native.js. This stays false either way: it means *web* push specifically.
   if (isNative()) return false;
   return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+
+// --- native push (APNs) ------------------------------------------------------
+//
+// An APNs device token does NOT fit `push_subscriptions`: that table is web-push
+// shaped ({endpoint, p256dh, auth}, all NOT NULL) and describes a browser
+// subscription, not a device. Native tokens get their own table, `apns_tokens`
+// — see supabase/migrations/20260728000000_apns_tokens.sql (NOT yet applied).
+//
+// Called only from registerForPushNotifications() in js/native.js, which is
+// itself gated behind APNS_ENABLED, so nothing reaches this before enrolment.
+export async function saveApnsToken(deviceToken, platform = 'ios') {
+  const user = await currentUser();
+  if (!user) throw new Error('Sign in first');
+  if (!deviceToken) throw new Error('No APNs device token');
+  const { error } = await supabase.from('apns_tokens').upsert({
+    user_id: user.id,
+    device_token: deviceToken,
+    platform,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'device_token' });
+  if (error) throw error;
 }
 
 // Registers this device to receive alerts even when the app is closed.

@@ -33,6 +33,28 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
     }
 
+    // APNs registration callbacks. @capacitor/push-notifications does not swizzle
+    // the app delegate: PushNotificationsPlugin only observes these two
+    // NotificationCenter posts, so without the forwarding below its
+    // `registration` event NEVER fires and register() eventually rejects with
+    // "event capacitorDidRegisterForRemoteNotifications not called."
+    //
+    // Inert until something calls registerForRemoteNotifications(), which on the
+    // JS side is gated behind APNS_ENABLED in js/native.js. Safe to ship now.
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        NotificationCenter.default.post(name: .capacitorDidRegisterForRemoteNotifications,
+                                        object: deviceToken)
+    }
+
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        // Fires with "no valid aps-environment entitlement string found" if
+        // APNS_ENABLED is turned on before the entitlement is added.
+        NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications,
+                                        object: error)
+    }
+
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
         // Called when the app was launched with a url. Feel free to add additional processing here,
         // but if you want the App API to support tracking app url opens, make sure to keep this call

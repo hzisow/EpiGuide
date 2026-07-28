@@ -11,6 +11,7 @@ import { icons } from '../icons.js';
 import { mountEpipens, teardownEpipens } from '../epipens.js';
 import {
   isNative, requestNativeNotificationPermission, showLocalNotification,
+  registerForPushNotifications, APNS_ENABLED,
 } from '../native.js';
 
 let root, built = false;
@@ -236,9 +237,16 @@ async function goAvailable(toggleEl) {
     let pushMsg = '';
     if (isNative()) {
       const granted = await requestNativeNotificationPermission();
+      if (granted) {
+        // APNs closed-app delivery. No-ops (and never throws) until
+        // APNS_ENABLED is flipped on in js/native.js post-enrolment, so today
+        // this line changes nothing.
+        await registerForPushNotifications();
+      }
+      const openAppOnly = APNS_ENABLED ? '' : ' — open-app only on iOS';
       pushMsg = granted
-        ? ' — open-app only on iOS'
-        : ' — open-app only on iOS (notifications are off in Settings)';
+        ? openAppOnly
+        : `${openAppOnly} (notifications are off in Settings)`;
     } else {
       try { await n.enablePush(); } catch (e) { pushMsg = ' (allow notifications for closed-app alerts)'; }
     }
@@ -270,7 +278,7 @@ function startListening(n) {
   if (alertUnsub) alertUnsub();
   alertUnsub = n.subscribeToAlerts((alert) => {
     // The realtime channel (gated by RLS) reaches every available responder;
-    // enforce the 4.5-mile alerting radius here by true distance, mirroring the
+    // enforce the 0.4-mile alerting radius here by true distance, mirroring the
     // server-side push fan-out. If we don't yet know our own position, allow it.
     const self = state.responderSelfCoords;
     if (self && Number.isFinite(alert.lat) && Number.isFinite(alert.lng)) {

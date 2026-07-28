@@ -24,6 +24,9 @@ const EXCLUDE = new Set([
   'android',
   'www',
   'scripts',
+  // Server-side only: SQL migrations and Edge Function source. Never belongs in
+  // the app bundle or on the public Pages site.
+  'supabase',
   'capacitor.config.json',
 ]);
 
