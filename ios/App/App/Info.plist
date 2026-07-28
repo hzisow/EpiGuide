@@ -27,7 +27,7 @@
 			<string>com.epiguide.app.googlesignin</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.REPLACE_WITH_IOS_CLIENT_ID</string>
+				<string>com.googleusercontent.apps.745503193120-p60pclku0rfoq59mipfjl4o4jhjlsqs4</string>
 			</array>
 		</dict>
 	</array>

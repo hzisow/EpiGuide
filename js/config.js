@@ -27,7 +27,8 @@ export const GOOGLE_CLIENT_ID =
 //      `com.googleusercontent.apps.<id>`
 // Until then native sign-in fails loudly with a visible "iOS Google client ID
 // not configured" message rather than silently doing nothing.
-export const GOOGLE_IOS_CLIENT_ID = 'REPLACE_WITH_IOS_CLIENT_ID';
+export const GOOGLE_IOS_CLIENT_ID =
+  '745503193120-p60pclku0rfoq59mipfjl4o4jhjlsqs4.apps.googleusercontent.com';
 export const VAPID_PUBLIC_KEY =
   'BAFx20w3cXxSsrklTvohW0N6UlsJRc5Hzm9p_wtROWm4FdIGuoHUatGPQq2Ex0Ak1HfBQbxspKfFh6sZIm1K-jU';
 
