@@ -183,7 +183,13 @@ function apnsConfig(): ApnsConfig | null {
 
 // Deno's fetch negotiates HTTP/2 over ALPN, which APNs requires; no HTTP/1.1
 // fallback exists on api.push.apple.com, so a plain fetch is sufficient here.
-async function sendApns(cfg: ApnsConfig, jwt: string, deviceToken: string, body: string) {
+async function sendApns(
+  cfg: ApnsConfig,
+  jwt: string,
+  deviceToken: string,
+  body: string,
+  collapseId: string,
+) {
   const res = await fetch(`https://${cfg.host}/3/device/${deviceToken}`, {
     method: 'POST',
     headers: {
@@ -194,8 +200,11 @@ async function sendApns(cfg: ApnsConfig, jwt: string, deviceToken: string, body:
       // 10 = deliver immediately. (5 would let iOS batch for power.)
       'apns-priority': '10',
       'apns-expiration': String(Math.floor(Date.now() / 1000) + APNS_EXPIRATION_SECONDS),
-      // Collapsing on the alert id means a retry replaces rather than stacks.
-      'apns-collapse-id': 'epiguide-alert',
+      // Keyed to THIS alert, so a retry of the same alert replaces its earlier
+      // notification while two genuinely different emergencies still both show.
+      // A constant here would silently collapse concurrent alerts into one.
+      // APNs caps this at 64 bytes; an alert id is a 36-char UUID.
+      'apns-collapse-id': collapseId.slice(0, 64),
       'content-type': 'application/json',
     },
     body,
@@ -285,7 +294,7 @@ Deno.serve(async (req) => {
         // Sent in parallel: every serialized round trip to Apple is delay in an
         // emergency, and the device count in a 644 m radius is small.
         const results = await Promise.allSettled(
-          tokens.map((t: any) => sendApns(apns, jwt, t.device_token, body)
+          tokens.map((t: any) => sendApns(apns, jwt, t.device_token, body, String(alert.id))
             .then((r) => ({ token: t.device_token, ...r }))),
         );
         const dead: string[] = [];
