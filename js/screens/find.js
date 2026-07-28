@@ -43,7 +43,6 @@ function build() {
                 <strong>Someone is reacting now</strong>
                 <small>Use an auto-injector — step by step</small>
               </span>
-              <span class="triage__chevron" aria-hidden="true">›</span>
             </button>
 
             <a class="triage__act triage__act--call" href="tel:911" id="find-call">
@@ -52,7 +51,6 @@ function build() {
                 <strong>Call 911</strong>
                 <small>Opens your phone's dialer</small>
               </span>
-              <span class="triage__chevron" aria-hidden="true">›</span>
             </a>
 
             <button class="triage__act" id="find-allow">

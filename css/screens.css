@@ -1024,7 +1024,12 @@
    Replaces the old permission-gate hero. Every row is reachable with no
    permission granted; only the third one asks for location, and it says why
    inline rather than behind a separate explainer card. */
-.triage { display: flex; flex-direction: column; gap: var(--space-3); width: 100%; }
+/* The hero used to be centred alone via `margin: auto 0`, which left a large
+   hole between the title and the first action. Centring the hero + actions as
+   one group instead keeps the pair optically centred while the gap between them
+   stays a fixed, designed distance. */
+.pre-prompt .welcome__hero { margin: auto 0 var(--space-5); }
+.triage { display: flex; flex-direction: column; gap: var(--space-3); width: 100%; margin-bottom: auto; }
 .triage__act {
   display: flex;
   align-items: center;
