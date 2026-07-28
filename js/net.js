@@ -10,7 +10,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
   SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY, APPROX_DECIMALS, GOOGLE_CLIENT_ID,
+  GOOGLE_IOS_CLIENT_ID,
 } from './config.js';
+import { isNative, getPlugin } from './native.js';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   // detectSessionInUrl is off: sign-in no longer round-trips through a redirect,
@@ -57,6 +59,18 @@ function loadGis() {
   }));
 }
 
+// The one place a Google ID token becomes a Supabase session. Both the web
+// (GIS) and native (SocialLogin) paths funnel through here — same provider,
+// same call, one code path.
+async function exchangeGoogleIdToken(idToken) {
+  if (!idToken) throw new Error('No credential returned from Google.');
+  const { error } = await supabase.auth.signInWithIdToken({
+    provider: 'google',
+    token: idToken,
+  });
+  if (error) throw error;
+}
+
 // Renders Google's official button into `container`. `onSignedIn` fires after
 // the Supabase session exists; `onError` receives any failure.
 export async function renderGoogleSignIn(container, { onSignedIn, onError } = {}) {
@@ -71,12 +85,7 @@ export async function renderGoogleSignIn(container, { onSignedIn, onError } = {}
     use_fedcm_for_prompt: true,
     callback: async (response) => {
       try {
-        if (!response?.credential) throw new Error('No credential returned from Google.');
-        const { error } = await supabase.auth.signInWithIdToken({
-          provider: 'google',
-          token: response.credential,
-        });
-        if (error) throw error;
+        await exchangeGoogleIdToken(response?.credential);
         onSignedIn?.();
       } catch (err) {
         onError?.(err);
@@ -96,7 +105,57 @@ export async function renderGoogleSignIn(container, { onSignedIn, onError } = {}
   });
 }
 
+// --- native (Capacitor) Google sign-in ---------------------------------------
+//
+// GIS refuses to run inside an embedded webview, so on iOS we hand off to the
+// native Google Sign-In SDK via @capgo/capacitor-social-login and feed the
+// resulting ID token into the SAME signInWithIdToken exchange the web uses.
+// (Not signInWithOAuth — that redirects through the *.supabase.co URL.)
+
+const IOS_CLIENT_ID_PLACEHOLDER = 'REPLACE_WITH_IOS_CLIENT_ID';
+
+export function nativeGoogleConfigured() {
+  return !!GOOGLE_IOS_CLIENT_ID && !GOOGLE_IOS_CLIENT_ID.includes(IOS_CLIENT_ID_PLACEHOLDER);
+}
+
+export async function signInWithGoogleNative() {
+  const SocialLogin = getPlugin('SocialLogin');
+  if (!SocialLogin) {
+    throw new Error('Native Google sign-in is unavailable in this build (SocialLogin plugin missing).');
+  }
+  // Fail LOUDLY when the placeholder is still in place, so "not configured" is
+  // never mistaken for "broken" while testing in the simulator.
+  if (!nativeGoogleConfigured()) {
+    throw new Error(
+      'iOS Google client ID not configured — set GOOGLE_IOS_CLIENT_ID in js/config.js '
+      + 'and the matching com.googleusercontent.apps.<id> entry in Info.plist.',
+    );
+  }
+
+  await SocialLogin.initialize({
+    google: {
+      iOSClientId: GOOGLE_IOS_CLIENT_ID,
+      // The *web* client ID is Google's "server client ID": it's the audience
+      // Supabase validates the ID token against.
+      iOSServerClientId: GOOGLE_CLIENT_ID,
+      mode: 'online',
+    },
+  });
+
+  const login = await SocialLogin.login({ provider: 'google', options: {} });
+  // The token is nested under `result` — `login.idToken` is undefined.
+  const idToken = login?.result?.idToken;
+  if (!idToken) throw new Error('Google did not return an ID token.');
+  await exchangeGoogleIdToken(idToken);
+}
+
 export async function signOut() {
+  // Clear the native Google session too, otherwise the next sign-in silently
+  // reuses the same account with no chooser.
+  const SocialLogin = getPlugin('SocialLogin');
+  if (SocialLogin) {
+    try { await SocialLogin.logout({ provider: 'google' }); } catch (_) {}
+  }
   await supabase.auth.signOut();
 }
 
@@ -261,12 +320,23 @@ function urlBase64ToUint8Array(base64String) {
   return out;
 }
 
+// Copy shown on the opt-in screen in the native shell. Deliberately blunt: the
+// iOS build genuinely CANNOT deliver closed-app alerts yet, and a toggle that
+// implies otherwise is worse than no toggle in an emergency app.
+export const NATIVE_PUSH_NOTICE =
+  'Closed-app alerts are not active on iOS yet — you’ll only be alerted while EpiGuide is open.';
+
 export function pushSupported() {
+  // A Capacitor WKWebView has no PushManager and no VAPID web push at all, so
+  // report the truth rather than letting the caller hide a guaranteed failure.
+  // Real closed-app alerts here need APNs — see the TODO(APNs) in js/native.js.
+  if (isNative()) return false;
   return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 }
 
 // Registers this device to receive alerts even when the app is closed.
 export async function enablePush() {
+  if (isNative()) throw new Error(NATIVE_PUSH_NOTICE);
   if (!pushSupported()) throw new Error('This device or browser does not support push alerts');
   const user = await currentUser();
   if (!user) throw new Error('Sign in first');

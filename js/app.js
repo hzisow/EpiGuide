@@ -11,6 +11,9 @@ import { initMedicHandoff } from './screens/medicHandoff.js';
 import { initOptIn, teardownOptIn } from './screens/optIn.js';
 import { initIncidentSummary } from './screens/incidentSummary.js';
 import { icons } from './icons.js';
+import {
+  installNativeGeolocation, installExternalLinkHandler, onLocalNotificationTap,
+} from './native.js';
 
 export const state = {
   currentScreen: 'find', // find | recognize | guide | dispatch | checklist |
@@ -204,6 +207,13 @@ window.EpiGuide = { navigate, state };
 
 // Boot.
 function boot() {
+  // Native shell only — all three are no-ops in a browser, so the web build
+  // boots exactly as before. The geolocation shim must be installed before any
+  // screen can call navigator.geolocation.getCurrentPosition.
+  installNativeGeolocation();
+  installExternalLinkHandler();
+  onLocalNotificationTap((alertId) => routeToIncomingAlert(alertId));
+
   buildTabBar();
   // Show the first screen immediately (no animation on cold start).
   const first = state.currentScreen;

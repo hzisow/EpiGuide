@@ -19,6 +19,7 @@ import { state, navigate, logIncidentEvent, logIncidentEventOnce } from '../app.
 import { icons } from '../icons.js';
 import { paintMapBackground, mountMap, reverseGeocode } from '../map.js';
 import { mountVolunteerCard } from '../volunteerCard.js';
+import { isNative, nativeShare } from '../native.js';
 
 let root, built = false;
 let stopwatchTimer = null;
@@ -143,7 +144,15 @@ async function shareStatus() {
   const text = lines.join('\n');
 
   try {
-    if (navigator.share) {
+    // navigator.share is unreliable inside a WKWebView, so the native shell
+    // goes straight to the Capacitor share sheet. Both reject on cancel, and
+    // both fall through to the SMS composer if unavailable.
+    if (isNative()) {
+      if (await nativeShare({ title: 'Emergency — anaphylaxis', text })) {
+        logIncidentEvent('Status shared with a contact');
+        return;
+      }
+    } else if (navigator.share) {
       await navigator.share({ title: 'Emergency — anaphylaxis', text });
       logIncidentEvent('Status shared with a contact');
       return;
@@ -153,6 +162,8 @@ async function shareStatus() {
     return;
   }
   // Fallback: open SMS composer with the body pre-filled (no recipient).
+  // Capacitor's navigation delegate hands sms:/tel: to UIApplication.open, so
+  // this still escapes the webview in the native shell.
   window.location.href = `sms:?&body=${encodeURIComponent(text)}`;
   logIncidentEvent('Status shared with a contact');
 }
