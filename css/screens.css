@@ -1027,18 +1027,34 @@
 .triage { display: flex; flex-direction: column; gap: var(--space-3); width: 100%; }
 .triage__act {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-3);
   width: 100%;
   text-align: left;
   padding: var(--space-4);
   border-radius: var(--radius-lg);
+  /* The pre-prompt background is white, so a white fill with a hairline border
+     made this read as plain text rather than a control. A raised card — real
+     border, shadow, chevron — is what makes it look pressable. */
   border: 1px solid var(--color-gray-divider);
   background: var(--color-white);
+  box-shadow: var(--shadow-card);
   color: var(--color-ink);
   text-decoration: none;
-  transition: transform var(--duration-base) var(--ease-out);
+  transition: transform var(--duration-base) var(--ease-out),
+              box-shadow var(--duration-base) var(--ease-out);
 }
+.triage__act:active { box-shadow: 0 1px 3px rgba(17, 24, 39, 0.12); }
+/* Pushes the chevron to the trailing edge. */
+.triage__act span { flex: 1 1 auto; }
+.triage__chevron {
+  flex: 0 0 auto;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--color-gray-text);
+}
+.triage__act--urgent .triage__chevron { color: rgba(255,255,255,0.75); }
+.triage__act--call .triage__chevron { color: var(--color-red-dark); }
 .triage__act:active { transform: scale(0.985); }
 @media (prefers-reduced-motion: reduce) { .triage__act:active { transform: none; } }
 .triage__act .icon { flex: 0 0 auto; width: 24px; height: 24px; margin-top: 1px; }
