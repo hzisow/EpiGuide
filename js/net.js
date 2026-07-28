@@ -62,13 +62,32 @@ function loadGis() {
 // The one place a Google ID token becomes a Supabase session. Both the web
 // (GIS) and native (SocialLogin) paths funnel through here — same provider,
 // same call, one code path.
-async function exchangeGoogleIdToken(idToken) {
+// `nonce` is the RAW nonce, passed only on the native path. Supabase hashes it
+// and compares against the `nonce` claim inside the ID token, so Google must
+// have been given the hashed form. GIS (web) issues tokens with no nonce claim
+// at all, so the web path omits it — passing one there would fail the same
+// "should either both exist or not" check in the opposite direction.
+async function exchangeGoogleIdToken(idToken, nonce) {
   if (!idToken) throw new Error('No credential returned from Google.');
   const { error } = await supabase.auth.signInWithIdToken({
     provider: 'google',
     token: idToken,
+    ...(nonce ? { nonce } : {}),
   });
   if (error) throw error;
+}
+
+// Google's iOS SDK always embeds a nonce claim in the ID token, so the native
+// path has to generate one and hand the same value to both sides.
+function randomNonce() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function sha256Hex(input) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 // Renders Google's official button into `container`. `onSignedIn` fires after
@@ -142,11 +161,27 @@ export async function signInWithGoogleNative() {
     },
   });
 
-  const login = await SocialLogin.login({ provider: 'google', options: {} });
+  // The SAME nonce goes to Google and to Supabase. Google echoes it verbatim
+  // into the token's `nonce` claim, and Supabase SHA-256-hashes whatever nonce
+  // it is given before comparing — so Google gets the hash and Supabase gets the
+  // raw value. Omitting the nonce entirely fails too ("Passed nonce and nonce in
+  // id_token should either both exist or not"), because Google's iOS SDK always
+  // embeds a nonce claim of its own.
+  const rawNonce = randomNonce();
+  const hashedNonce = await sha256Hex(rawNonce);
+
+  // forcePrompt is REQUIRED, not a UX preference. Without it the plugin takes
+  // its `hasPreviousSignIn()` branch and calls restorePreviousSignIn(), which
+  // accepts no nonce and returns a cached token still carrying the nonce from
+  // the original interactive sign-in — so ours could never match.
+  const login = await SocialLogin.login({
+    provider: 'google',
+    options: { nonce: hashedNonce, forcePrompt: true },
+  });
   // The token is nested under `result` — `login.idToken` is undefined.
   const idToken = login?.result?.idToken;
   if (!idToken) throw new Error('Google did not return an ID token.');
-  await exchangeGoogleIdToken(idToken);
+  await exchangeGoogleIdToken(idToken, rawNonce);
 }
 
 export async function signOut() {
