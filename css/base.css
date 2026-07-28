@@ -121,7 +121,7 @@ h1, h2, h3, p { margin: 0; }
 }
 
 /* Safe-area padding for notch / home indicator */
-.safe-top    { padding-top: max(var(--space-4), env(safe-area-inset-top)); }
+.safe-top    { padding-top: max(var(--space-4), calc(env(safe-area-inset-top) + var(--space-2))); }
 .safe-bottom { padding-bottom: max(var(--space-4), env(safe-area-inset-bottom)); }
 
 .visually-hidden {

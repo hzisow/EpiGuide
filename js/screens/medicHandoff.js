@@ -8,6 +8,8 @@ import { state, navigate, logIncidentEvent, logIncidentEventOnce } from '../app.
 import { icons } from '../icons.js';
 import { paintMapBackground, mountMap, reverseGeocode } from '../map.js';
 import { checklistCategories } from '../data/checklistItems.js';
+import { guides } from '../data/guideSteps.js';
+import { isNative, nativeShare } from '../native.js';
 
 const ALL_ITEMS = checklistCategories.flatMap((c) => c.items);
 
@@ -52,12 +54,7 @@ function build() {
       </div>
     </div>`;
 
-  root.querySelector('#mh-share').addEventListener('click', () => {
-    const btn = root.querySelector('#mh-share');
-    btn.innerHTML = `${icons.checkCircle()} Timeline shared`;
-    btn.setAttribute('aria-disabled', 'true');
-    logIncidentEvent('Timeline shared with EMS');
-  });
+  root.querySelector('#mh-share').addEventListener('click', shareTimeline);
 
   root.querySelector('#mh-summary').addEventListener('click', () => navigate('incidentSummary'));
 
@@ -91,6 +88,57 @@ function render() {
     });
   } else {
     addrEl.textContent = 'Location unavailable — read your address to EMS';
+  }
+}
+
+// Builds the same handoff the screen displays, as plain text EMS can be sent.
+// Mirrors shareSummary() in incidentSummary.js: native share sheet on iOS,
+// Web Share API on the web, clipboard as the last resort.
+async function shareTimeline() {
+  const epi = state.dispatch.epinephrineGivenAt;
+  const deviceLabel = state.guide.device ? guides[state.guide.device]?.label : null;
+  const ids = state.checklist.checkedItemIds || [];
+  const symptomLabels = ids.map((id) => ALL_ITEMS.find((i) => i.id === id)?.label).filter(Boolean);
+  const events = [...state.incident.events].sort((a, b) => a.time - b.time);
+  const addr = root.querySelector('#mh-addr')?.textContent?.trim();
+
+  const text = [
+    'EMS HANDOFF — anaphylaxis',
+    '',
+    `Epinephrine given: ${epi ? `${formatTime(epi)}${deviceLabel ? ` (${deviceLabel})` : ''}` : 'Not yet given'}`,
+    `Symptoms observed: ${symptomLabels.length ? symptomLabels.join(', ') : 'Not recorded'}`,
+    `Patient location: ${addr || 'Not recorded'}`,
+    '',
+    'Timeline:',
+    ...(events.length ? events.map((e) => `  ${formatTime(e.time)} — ${e.label}`) : ['  No events recorded']),
+    '',
+    'Bystander-recorded handoff — not an official medical record.',
+  ].join('\n');
+
+  try {
+    if (isNative()) {
+      if (await nativeShare({ title: 'EMS handoff', text })) {
+        logIncidentEvent('Timeline shared with EMS');
+        return;
+      }
+    } else if (navigator.share) {
+      await navigator.share({ title: 'EMS handoff', text });
+      logIncidentEvent('Timeline shared with EMS');
+      return;
+    }
+  } catch (_) {
+    return; // user dismissed the share sheet
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    logIncidentEvent('Timeline copied for EMS');
+    const btn = root.querySelector('#mh-share');
+    const original = btn.innerHTML;
+    btn.innerHTML = `${icons.checkCircle()} Copied to clipboard`;
+    setTimeout(() => { btn.innerHTML = original; }, 2000);
+  } catch (_) {
+    // No share, no clipboard — nothing more we can do silently.
   }
 }
 
