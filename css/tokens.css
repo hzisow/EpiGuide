@@ -29,11 +29,29 @@
   --radius-xl: 24px;
   --radius-pill: 999px;
 
-  /* Physical display corner radius of modern iPhones (~55pt), used to keep
-     floating chrome concentric with the bezel. On a square-cornered viewport
-     the inset chrome just clamps to its own pill radius, so this is inert. */
-  --device-corner-radius: 55px;
-  --tabbar-inset: 16px;
+  /* Approximate physical display corner radius, DERIVED rather than hardcoded.
+     The bottom safe-area inset is the best proxy the platform gives us: devices
+     with a home indicator report ~34pt and have ~55pt corners; iPads report
+     ~20pt with ~25pt corners; flat, square-cornered viewports report 0 and fall
+     back to the floor. So one expression tracks the whole range, including
+     hardware that doesn't exist yet, instead of a per-device table. */
+  --device-corner-radius: max(22px, calc(env(safe-area-inset-bottom) * 1.6));
+  /* 24px, not 16px, and the exact value matters — see --tabbar-radius. */
+  --tabbar-inset: 24px;
+
+  /* Tab bar corner radius, genuinely concentric with the bezel.
+     A curve inset by `d` from a corner of radius `R` stays parallel to it only
+     when its own radius is `R - d`. The catch: CSS clamps border-radius to half
+     the box height, so on a ~66px-tall bar anything above ~33px collapses into a
+     capsule — fully round ends, which is what read as "no harmony" against the
+     device's rounded-rectangle corner.
+     At the old 16px inset the concentric value was 54 - 16 = 38px, above that
+     ceiling, so it always degenerated. Widening the inset to 24px brings it to
+     54 - 24 = 30px, which fits under the ceiling — so the bar can now be both
+     concentric AND render as the rounded rectangle it should be.
+     The max() floor covers viewports with no safe-area inset (any browser),
+     where R falls to its own floor and the subtraction would go negative. */
+  --tabbar-radius: max(18px, calc(var(--device-corner-radius) - var(--tabbar-inset)));
 
   /* Elevation */
   --shadow-card: 0 2px 8px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);

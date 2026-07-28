@@ -223,20 +223,19 @@
    including full-screen modals — nothing hides it. */
 .tabbar {
   position: absolute;
-  left: var(--tabbar-inset); right: var(--tabbar-inset);
+  /* Respect side insets too — in landscape on a notched phone the safe area
+     moves to the left/right edges, and a fixed inset would tuck the bar under
+     the sensor housing or the rounded corner. */
+  left: max(var(--tabbar-inset), env(safe-area-inset-left));
+  right: max(var(--tabbar-inset), env(safe-area-inset-right));
   bottom: max(var(--space-4), env(safe-area-inset-bottom));
   z-index: 40;
   display: none;
   gap: var(--space-1);
   padding: 6px;
-  /* Concentric with the physical bezel: a rounded rectangle inset from a
-     rounded corner stays visually parallel only when its radius is the outer
-     radius minus the inset. min() keeps it from exceeding a full pill on short
-     bars (CSS would clamp anyway, but this states the intent). */
-  border-radius: min(
-    var(--radius-pill),
-    calc(var(--device-corner-radius) - var(--tabbar-inset))
-  );
+  /* Rounded rectangle that tracks the bezel — see --tabbar-radius for why this
+     is a scaled radius rather than the naive "device radius minus inset". */
+  border-radius: var(--tabbar-radius);
   /* Translucent material rather than flat white, so content scrolling beneath
      shows through the way UITabBar does. */
   background: rgba(255, 255, 255, 0.72);
