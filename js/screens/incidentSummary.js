@@ -10,7 +10,7 @@
 // GPS). Nothing is invented, and the screen says plainly that it is a
 // bystander-recorded account, not an official medical record.
 
-import { state, navigate, resetIncident } from '../app.js';
+import { state, navigate, resetIncident, call911Summary } from '../app.js';
 import { icons } from '../icons.js';
 import { isNative, nativeShare } from '../native.js';
 import { reverseGeocode } from '../map.js';
@@ -70,6 +70,10 @@ function render() {
         <span class="value">${epi ? `${formatTime(epi)}${deviceLabel ? ` · ${deviceLabel}` : ''}` : 'Not given'}</span>
       </div>
       <div class="summary-row">
+        <span class="eyebrow label">911</span>
+        <span class="value">${call911Summary()}</span>
+      </div>
+      <div class="summary-row">
         <span class="eyebrow label">Symptoms observed</span>
         <span class="value">${symptomLabels.length ? symptomLabels.join(', ') : 'Not recorded'}</span>
       </div>
@@ -114,6 +118,7 @@ async function shareSummary() {
     `Incident summary — ${formatDate(new Date())}`,
     '',
     `Epinephrine given: ${epi ? `${formatTime(epi)}${deviceLabel ? ` (${deviceLabel})` : ''}` : 'Not given'}`,
+    `911: ${call911Summary()}`,
     `Symptoms observed: ${symptomLabels.length ? symptomLabels.join(', ') : 'Not recorded'}`,
     '',
     'Timeline:',

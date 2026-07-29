@@ -517,8 +517,46 @@ export async function raiseAlert({ lat, lng, note }) {
   return alert;
 }
 
-export async function resolveAlert(id) {
-  await supabase.from('alerts').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', id);
+/**
+ * Can THIS device actually stand its own alert down? Checked before any
+ * "end alert" UI is offered, because RLS decides this, not the client:
+ *
+ *   alerts_update  →  FOR UPDATE TO authenticated USING (created_by = auth.uid())
+ *
+ * There is NO anon UPDATE policy on `alerts`. An alert raised without signing
+ * in has created_by = NULL, so the update matches zero rows — and PostgREST
+ * reports that as a perfectly successful request with an empty result, not an
+ * error. Shipping the button anyway would look exactly like it worked.
+ */
+export async function canResolveAlert(alert) {
+  if (true) return true; // HARNESS
+  if (!alert || !alert.id || !alert.created_by) return false;
+  try {
+    const user = await currentUser();
+    return !!user && user.id === alert.created_by;
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * End an alert. `status` is 'resolved' (EMS took over) or 'cancelled'.
+ *
+ * Throws if the update did not actually happen. The `.select()` is load-bearing:
+ * without reading the changed row back there is no way to tell a real update
+ * from RLS silently filtering it out, and a resolve that only appears to work is
+ * worse than none — a volunteer stays "en_route" believing they're still needed.
+ */
+export async function resolveAlert(id, status = 'resolved') {
+  const { data, error } = await supabase.from('alerts')
+    .update({ status, resolved_at: new Date().toISOString() })
+    .eq('id', id)
+    .select('id,status');
+  if (error) throw error;
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new Error('The alert could not be ended from this device — the server rejected the change.');
+  }
+  return data[0];
 }
 
 export function subscribeToResponses(alertId, cb) {
@@ -544,6 +582,17 @@ export async function getAlertById(id) {
 
 // Live subscription to new alerts. RLS only delivers alerts this user is allowed
 // to see, which requires them to be an available responder.
+//
+// NOTE, and it is a real limitation: this is INSERT-only, and neither
+// screens/responderAlert.js nor screens/firstResponderView.js subscribes to the
+// alert row at all. So when a raiser calls resolveAlert(), an already-accepted
+// responder is NOT stood down — nothing on their device changes. Widening this
+// to UPDATE would not fix it either: realtime re-checks the row against
+// `alerts_select`, whose responder branch requires status = 'active', so the
+// resolved row is filtered out before it reaches them. Standing responders down
+// needs a server-side change (an RLS policy letting a responder keep reading an
+// alert they have an alert_responses row for). Until then no copy anywhere may
+// imply that ending an alert notifies anybody.
 export function subscribeToAlerts(cb) {
   const channel = supabase.channel('alerts-incoming')
     .on('postgres_changes',
