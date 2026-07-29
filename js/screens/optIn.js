@@ -9,6 +9,10 @@
 import { state, navigate } from '../app.js';
 import { icons } from '../icons.js';
 import { mountEpipens, teardownEpipens } from '../epipens.js';
+import {
+  isNative, requestNativeNotificationPermission, showLocalNotification,
+  registerForPushNotifications, APNS_ENABLED,
+} from '../native.js';
 
 let root, built = false;
 let netP, alertUnsub = null;
@@ -80,16 +84,46 @@ function renderSignedOut() {
       <div id="oi-error" class="optin__error" hidden></div>
       <div class="gsi-mount" id="oi-google" style="margin-top:16px;">
         <button type="button" class="gsi" id="oi-google-fallback" aria-disabled="true">
-          ${gsiLabel('Loading Google…')}
+          ${gsiLabel(isNative() ? 'Sign in with Google' : 'Loading Google…')}
         </button>
       </div>
     </div>
     <p class="optin__note">Volunteers are covered by Good Samaritan laws in all 50 states.</p>`);
 
-  // Google Identity Services renders its own button here, which hands us an ID
-  // token in-page (no redirect through the *.supabase.co URL). The placeholder
-  // above is replaced on success, or turned into a retry if Google can't load.
-  mountGoogleButton();
+  // Native: GIS is blocked in an embedded webview and gid.renderButton() mounts
+  // a cross-origin iframe that can't work there, so we draw our own button and
+  // hand off to the native Google Sign-In SDK. Web: unchanged — Google Identity
+  // Services renders its own button, which hands us an ID token in-page (no
+  // redirect through the *.supabase.co URL). The placeholder above is replaced
+  // on success, or turned into a retry if Google can't load.
+  if (isNative()) mountNativeGoogleButton();
+  else mountGoogleButton();
+}
+
+// Native-only: a plain, self-rendered button (no cross-origin iframe).
+function mountNativeGoogleButton() {
+  const mount = root.querySelector('#oi-google');
+  if (!mount) return;
+  mount.innerHTML = `<button type="button" class="gsi" id="oi-google-native">
+    ${gsiLabel('Sign in with Google')}
+  </button>`;
+  const btn = mount.querySelector('#oi-google-native');
+  btn.addEventListener('click', async () => {
+    hideError();
+    btn.setAttribute('aria-disabled', 'true');
+    btn.innerHTML = gsiLabel('Signing in…');
+    try {
+      const n = await net();
+      await n.signInWithGoogleNative();
+      refresh();
+    } catch (err) {
+      // Includes the loud "iOS Google client ID not configured" case, so an
+      // unconfigured build is visibly different from a broken one.
+      btn.removeAttribute('aria-disabled');
+      btn.innerHTML = gsiLabel('Sign in with Google');
+      showError(friendly(err));
+    }
+  });
 }
 
 async function mountGoogleButton() {
@@ -160,7 +194,9 @@ async function renderSignedIn(user) {
     <div id="oi-epipens"></div>
 
     <button class="btn btn--ghost" id="oi-signout" style="margin:4px auto 0;display:block;">Sign out</button>
-    <p class="optin__note">We'll remind you before a pen expires. Alerts reach you even with the app closed once you allow notifications; turning off availability stops them.</p>`);
+    <p class="optin__note">${isNative()
+      ? `Once you allow notifications, we'll remind you 30 days before a pen expires and again on the day. <strong>Closed-app emergency alerts aren't active on iOS yet</strong> — you'll be alerted while EpiGuide is open. Turning off availability stops alerts.`
+      : `Your pens' expiry dates are tracked here, but this browser can't schedule a reminder — check back yourself. Emergency alerts reach you even with the app closed once you allow notifications; turning off availability stops them.`}</p>`);
 
   // Mount the EpiPen inventory (scan a pen, track expirations). Saving a pen
   // also updates the availability profile above (what you carry).
@@ -193,9 +229,27 @@ async function goAvailable(toggleEl) {
     await n.setAvailability(true, coords);
     state.responderSelfCoords = coords; // used to gate alerts by true distance
 
-    // Best-effort push; the live in-app path works regardless.
+    // Notifications. On the web this is real closed-app web push. On iOS there
+    // is no web push in a WKWebView (pushSupported() reports false there), so we
+    // say so plainly instead of dressing a guaranteed failure up as success —
+    // and we ask for LOCAL notification permission, which is what actually
+    // fires when an alert lands while the app is running.
     let pushMsg = '';
-    try { await n.enablePush(); } catch (e) { pushMsg = ' (allow notifications for closed-app alerts)'; }
+    if (isNative()) {
+      const granted = await requestNativeNotificationPermission();
+      if (granted) {
+        // APNs closed-app delivery. No-ops (and never throws) until
+        // APNS_ENABLED is flipped on in js/native.js post-enrolment, so today
+        // this line changes nothing.
+        await registerForPushNotifications();
+      }
+      const openAppOnly = APNS_ENABLED ? '' : ' — open-app only on iOS';
+      pushMsg = granted
+        ? openAppOnly
+        : `${openAppOnly} (notifications are off in Settings)`;
+    } else {
+      try { await n.enablePush(); } catch (e) { pushMsg = ' (allow notifications for closed-app alerts)'; }
+    }
 
     startListening(n);
     setStatus(`Listening for nearby alerts${pushMsg}`, 'on');
@@ -224,13 +278,23 @@ function startListening(n) {
   if (alertUnsub) alertUnsub();
   alertUnsub = n.subscribeToAlerts((alert) => {
     // The realtime channel (gated by RLS) reaches every available responder;
-    // enforce the 4.5-mile alerting radius here by true distance, mirroring the
+    // enforce the 0.4-mile alerting radius here by true distance, mirroring the
     // server-side push fan-out. If we don't yet know our own position, allow it.
     const self = state.responderSelfCoords;
     if (self && Number.isFinite(alert.lat) && Number.isFinite(alert.lng)) {
       if (n.haversineMeters(self.lat, self.lng, alert.lat, alert.lng) > n.ALERT_RADIUS_M) return;
     }
     state.incomingAlert = alert;
+    // Native: no APNs yet, so fire a LOCAL notification off the same realtime
+    // event that drives the screen below. That covers the app being open or
+    // recently backgrounded — not a closed app, which is why the UI says so.
+    if (isNative()) {
+      showLocalNotification({
+        title: 'Someone near you needs epinephrine',
+        body: alert.patient_note || 'Possible anaphylaxis',
+        alertId: alert.id,
+      });
+    }
     navigate('responderAlert');
   });
 }

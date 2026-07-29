@@ -12,6 +12,7 @@
 
 import { state, navigate, resetIncident } from '../app.js';
 import { icons } from '../icons.js';
+import { isNative, nativeShare } from '../native.js';
 import { reverseGeocode } from '../map.js';
 import { checklistCategories } from '../data/checklistItems.js';
 import { guides } from '../data/guideSteps.js';
@@ -123,7 +124,12 @@ async function shareSummary() {
   const text = lines.join('\n');
 
   try {
-    if (navigator.share) {
+    // navigator.share is unreliable inside a WKWebView — the native shell uses
+    // the Capacitor share sheet instead. Both fall through to the clipboard
+    // copy below if unavailable.
+    if (isNative()) {
+      if (await nativeShare({ title: 'Incident summary', text })) return;
+    } else if (navigator.share) {
       await navigator.share({ title: 'Incident summary', text });
       return;
     }

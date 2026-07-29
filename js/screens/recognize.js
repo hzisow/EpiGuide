@@ -1,14 +1,23 @@
 // Screen 2 — Recognize. Live rear-camera feed with REAL computer vision:
-//   • MediaPipe Face Mesh → 468 landmarks → honest lip-swelling / flushing cues
-//     measured against a per-session baseline (js/faceVision.js).
+//   • MediaPipe Face Mesh → 468 landmarks → flushing, plus lip/eyelid geometry
+//     compared against a baseline taken from the first ~12 frames of THIS scan
+//     (js/faceVision.js).
 //   • A MobileNetV2 skin-reaction classifier trained on the SCIN dermatology
 //     registry, running in-browser via TensorFlow.js (js/hivesModel.js).
 //
 // HONESTY NOTE (a core product identity): real users still see a CATEGORY only,
 // never a raw score. The vision layer assists — it flags visible cues (skin
-// reaction, facial swelling, flushing) and feeds them into the SAME registry
+// reaction, flushing, lip/eye change) and feeds them into the SAME registry
 // symptom model the checklist uses. It does not diagnose; the bystander decides.
 // When nothing is visible, the app says so honestly instead of inventing a match.
+//
+// TWO LIMITS THE COPY ON THIS SCREEN MUST KEEP STATING:
+//   1. The swelling baseline is the patient's own face at the start of the scan,
+//      so this can only see swelling that WORSENS during the scan — never
+//      swelling that was already established. Never say "detects swelling".
+//   2. Both engines load from a CDN and can simply fail. If they do, reveal()
+//      reports that the check didn't run; it must never fall through to
+//      "No visible signs detected", which is a clinical negative.
 
 import { state, navigate, logIncidentEventOnce } from '../app.js';
 import { icons } from '../icons.js';
@@ -31,7 +40,10 @@ let seenFrames = 0;
 
 // --- Vision state (reset each visit) ---
 let faceVision = null;         // landmark analyzer
-let hivesReady = false;        // TF.js skin classifier loaded?
+let hivesReady = false;        // TF.js skin classifier ACTUALLY loaded?
+let faceMeshReady = false;     // MediaPipe Face Mesh ACTUALLY loaded?
+let hivesSettled = false;      // …and has its load attempt finished either way?
+let faceMeshSettled = false;
 let cropCanvas = null;         // reused 224² canvas for the CNN
 let readyFrames = 0;           // frames counted after baseline warmup
 let swellVotes = 0, flushVotes = 0;
@@ -49,6 +61,7 @@ export function initRecognize() {
   logIncidentEventOnce('start', 'Symptom check started');
   // Reset per-visit UI + vision state.
   state.recognize.result = null;
+  state.recognize.revealed = false;
   facingMode = 'environment';
   seenFrames = 0;
   lastFaceBox = null;
@@ -56,6 +69,9 @@ export function initRecognize() {
   readyFrames = swellVotes = flushVotes = 0;
   reactionSum = reactionN = cnnFrame = 0;
   lastSkinTop = null; lastSkinProb = 0;
+  // A new visit re-runs both loaders, so nothing is "loaded" until it says so.
+  hivesReady = faceMeshReady = false;
+  hivesSettled = faceMeshSettled = false;
   sheetEl.hidden = true;
   showPermPrompt();
 }
@@ -159,10 +175,12 @@ async function startCamera() {
   running = true;
   startBadgeCycle();
   // Start loading the in-browser skin classifier (non-blocking). If it can't
-  // load (offline first run / blocked CDN), we degrade to landmark-only cues.
+  // load (offline first run / blocked CDN), we degrade to landmark-only cues —
+  // and if BOTH engines fail, reveal() refuses to report a negative finding.
   ensureHivesModel()
     .then(() => { hivesReady = true; })
-    .catch(() => { hivesReady = false; });
+    .catch(() => { hivesReady = false; })
+    .finally(() => { hivesSettled = true; renderBadge(); });
   await setupFaceMesh();
   // Fallback reveal: even if detection is sparse, present the read after a scan
   // window so the flow always progresses.
@@ -207,8 +225,9 @@ async function flipCamera() {
 
   // If a result had already been revealed, don't leave a stale read on
   // screen for the new camera view — go back to scanning honestly.
-  if (state.recognize.result === 'match') {
+  if (state.recognize.revealed) {
     state.recognize.result = null;
+    state.recognize.revealed = false;
     sheetEl.hidden = true;
     sheetEl.innerHTML = '';
     startBadgeCycle();
@@ -237,12 +256,18 @@ async function setupFaceMesh() {
       minTrackingConfidence: 0.5,
     });
     faceMesh.onResults(onResults);
+    faceMeshReady = true;
     pump();
   } catch (err) {
     // MediaPipe couldn't load — degrade to a static centered viewfinder. Still
-    // honest: brackets frame where to aim; no detection claims are made.
+    // honest: brackets frame where to aim; no detection claims are made, the
+    // badges stop claiming checks, and reveal() reports that nothing ran.
     faceMesh = null;
+    faceMeshReady = false;
     drawStaticViewfinder();
+  } finally {
+    faceMeshSettled = true;
+    renderBadge();
   }
 }
 
@@ -333,7 +358,7 @@ function drawFaceOverlay(pts, box, reading) {
   drawBrackets(box);
 
   // Scanning sweep while we're still accumulating evidence.
-  if (state.recognize.result !== 'match' && readyFrames < SCAN_FRAMES) {
+  if (!state.recognize.revealed && readyFrames < SCAN_FRAMES) {
     const t = (performance.now() % 2200) / 2200;
     const y = box.y + box.h * (t < 0.5 ? t * 2 : 2 - t * 2);
     const grad = ctx.createLinearGradient(box.x, 0, box.x + box.w, 0);
@@ -454,19 +479,42 @@ function drawStaticViewfinder() {
   drawBrackets({ x: (w - bw) / 2, y: (h - bh) / 2 - h * 0.05, w: bw, h: bh });
 }
 
-// Plain-language checks cycle (no numbers, ever).
-const CHECKS = ['Checking: face & lips', 'Checking: skin'];
+// Plain-language checks cycle (no numbers, ever). The list is built from the
+// engines that ACTUALLY loaded, so the badge never advertises a check that
+// isn't running.
+//
+// "Watching for changes" is deliberate and is the literal truth about the
+// landmark check: the baseline it compares against is the first ~12 frames of
+// THIS scan (js/faceVision.js), i.e. of the same face. It can therefore only
+// see swelling that gets worse while the camera is watching — never swelling
+// that was already there. The old "Checking: face & lips" claimed the latter.
+function activeChecks() {
+  const checks = [];
+  if (faceMeshReady) checks.push('Watching for changes: lips & eyes');
+  if (hivesReady) checks.push('Checking: skin');
+  return checks;
+}
+
 let checkIndex = 0;
 function startBadgeCycle() {
   checkIndex = 0;
   renderBadge();
+  clearInterval(badgeTimer);
   badgeTimer = setInterval(() => {
-    checkIndex = (checkIndex + 1) % CHECKS.length;
+    checkIndex += 1;
     renderBadge();
   }, 1800);
 }
 function renderBadge() {
-  badgesEl.innerHTML = `<span class="badge-glass">${CHECKS[checkIndex]}</span>`;
+  if (!badgesEl || state.recognize.revealed) return;
+  const checks = activeChecks();
+  if (!checks.length) {
+    badgesEl.innerHTML = (faceMeshSettled && hivesSettled)
+      ? `<span class="badge-glass">Visual check unavailable</span>`
+      : `<span class="badge-glass">Starting the visual check…</span>`;
+    return;
+  }
+  badgesEl.innerHTML = `<span class="badge-glass">${checks[checkIndex % checks.length]}</span>`;
 }
 function positionBadges(box) {
   // Nudge the badge stack toward the detected face region.
@@ -498,14 +546,51 @@ function summarizeVision() {
            any: skinReaction || flushing || swelling };
 }
 
+// Did the vision layer actually MEASURE anything? Loading an engine isn't
+// enough — MediaPipe with no face in frame, or the CNN with no crop, produce
+// zero readings, and zero readings are not a negative result.
+function visionMeasured() {
+  return (faceMeshReady && readyFrames > 0) || (hivesReady && reactionN > 0);
+}
+
+function failureReason() {
+  if (!faceMeshReady && !hivesReady) {
+    return 'The vision models couldn’t load — they need a connection the first time. Nothing was scanned.';
+  }
+  return 'The camera never got a steady enough look at a face to measure anything.';
+}
+
 function reveal() {
-  if (state.recognize.result === 'match') return; // already revealed
+  if (state.recognize.revealed) return; // already revealed
   clearTimeout(revealTimer);
   if (badgeTimer) { clearInterval(badgeTimer); badgeTimer = null; }
   badgesEl.innerHTML = '';
-  state.recognize.result = 'match';
+  state.recognize.revealed = true;
+
+  // NOTHING RAN. Rendering "No visible signs detected" here would be a negative
+  // finding from a scan that never happened — indistinguishable from a real
+  // negative. `result` stays null so js/volunteerCard.js derives no clinical
+  // note from it; only `revealed` (the UI latch) is set.
+  if (!visionMeasured()) {
+    state.recognize.result = null;
+    sheetEl.hidden = false;
+    sheetEl.innerHTML = `
+      <span class="recognize__pill recognize__pill--caution">Check didn’t run</span>
+      <div class="recognize__result-head">Couldn’t run the visual check</div>
+      <div class="recognize__result-sub">${failureReason()} This is <strong>not</strong> a negative result — it means nothing was measured.</div>
+      <p class="body-sm" style="color:rgba(255,255,255,0.6);margin:-8px 0 16px;">
+        Use the symptom checklist instead — it needs no camera and no connection.
+      </p>
+      <button class="btn btn--primary btn--block" id="rec-checklist">Check symptoms</button>
+      <button class="btn btn--ghost" id="rec-confirm">Skip to guide</button>`;
+    wireRevealButtons();
+    return;
+  }
 
   const v = summarizeVision();
+  // Record the verdict the scan ACTUALLY reached. `v.any` false means nothing
+  // was seen, which must not be reported downstream as a positive finding.
+  state.recognize.result = v.any ? 'match' : 'noMatch';
   const result = scoreWithSafetyOverride(v.modelState);
   const debug = isDebugMode() ? debugPanelHTML(result) + visionDebugHTML(v) : '';
 
@@ -515,9 +600,9 @@ function reveal() {
     sheetEl.innerHTML = `
       <span class="recognize__pill recognize__pill--low">No visible signs</span>
       <div class="recognize__result-head">No visible signs detected</div>
-      <div class="recognize__result-sub">The camera didn't see swelling, flushing, or a skin reaction. That doesn't rule anything out — a reaction can be internal (throat, breathing) or start later.</div>
+      <div class="recognize__result-sub">The camera didn't see flushing or a skin reaction, and the lips and eyes didn't change while it watched. That doesn't rule anything out — a reaction can be internal (throat, breathing) or start later.</div>
       <p class="body-sm" style="color:rgba(255,255,255,0.6);margin:-8px 0 16px;">
-        Vision only sees the surface. Check symptoms to be sure.
+        It measures swelling as a <em>change</em> over the few seconds of the scan, so swelling already present before the scan looks normal to it. Check symptoms to be sure.
       </p>
       <button class="btn btn--primary btn--block" id="rec-checklist">Check symptoms</button>
       <button class="btn btn--ghost" id="rec-confirm">Skip to guide</button>
@@ -530,7 +615,10 @@ function reveal() {
   const pill = URGENCY_PILL[result.urgency];
   const cues = [];
   if (v.skinReaction) cues.push('skin reaction');
-  if (v.swelling) cues.push('facial swelling');
+  // Not "facial swelling": all this measurement can support is that the lips or
+  // eyes changed DURING the scan, against a baseline taken from the same face
+  // seconds earlier. See js/faceVision.js.
+  if (v.swelling) cues.push('lips/eyes swelling during the check');
   if (v.flushing) cues.push('flushing');
   const seen = cues.join(', ');
 

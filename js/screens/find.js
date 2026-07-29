@@ -4,7 +4,7 @@
 // registry of cabinet locations, so that fabricated data was removed — the
 // volunteer network is the real way to get a pen fast.)
 
-import { state } from '../app.js';
+import { state, navigate } from '../app.js';
 import { icons } from '../icons.js';
 import { paintMapBackground, mountMap, reverseGeocode } from '../map.js';
 import { mountVolunteerCard } from '../volunteerCard.js';
@@ -30,14 +30,39 @@ function build() {
           <div class="welcome__hero">
             <img class="welcome__logo" src="icons/icon-192.png" alt="" width="76" height="76" />
             <span class="eyebrow welcome__brand">EpiGuide</span>
-            <h1 class="display">Epinephrine, fast.</h1>
-            <p class="body text-muted">Find help and get clear, step-by-step guidance in an anaphylaxis emergency.</p>
+            <h1 class="display">What's happening?</h1>
           </div>
-          <div class="welcome__why">
-            ${icons.mapPin()}
-            <p class="body-sm">Your location is used only to show your address for 911 and — only if you ask — to alert nearby volunteers who carry an epinephrine auto-injector.</p>
+
+          <!-- Action-first triage. Nothing here is gated on a permission: the
+               emergency paths are one tap away the moment the app opens, and
+               location is requested inside the path that actually needs it. -->
+          <div class="triage">
+            <button class="triage__act triage__act--urgent" id="find-reacting">
+              ${icons.alertTriangle('icon')}
+              <span>
+                <strong>Someone is reacting now</strong>
+                <small>Use an auto-injector — step by step</small>
+              </span>
+            </button>
+
+            <a class="triage__act triage__act--call" href="tel:911" id="find-call">
+              ${icons.phone('icon')}
+              <span>
+                <strong>Call 911</strong>
+                <small>Opens your phone's dialer</small>
+              </span>
+            </a>
+
+            <button class="triage__act" id="find-allow">
+              ${icons.mapPin('icon')}
+              <span>
+                <strong>Find epinephrine near me</strong>
+                <small>Needs your location — used for your 911 address and, only if you ask, to alert nearby volunteers</small>
+              </span>
+              <span class="triage__chevron" aria-hidden="true">›</span>
+            </button>
           </div>
-          <button class="btn btn--primary btn--block" id="find-allow">Allow location</button>
+
           <p class="welcome__error" id="find-error" hidden></p>
           <p class="welcome__fine">Free · No account needed · Works offline</p>
         </div>
@@ -53,6 +78,13 @@ function build() {
   paintMapBackground(mapEl);
 
   root.querySelector('#find-allow').addEventListener('click', requestLocation);
+
+  // Straight to the injection guide — the one action that is useful with no
+  // permission, no account and no network.
+  root.querySelector('#find-reacting').addEventListener('click', () => {
+    state.guide.currentStep = 1;
+    navigate('guide');
+  });
 
   built = true;
 

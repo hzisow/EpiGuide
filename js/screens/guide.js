@@ -66,9 +66,24 @@ function renderPicker() {
             <span>${guides[d].label}</span>
             <span class="guide__picker-chevron" aria-hidden="true">›</span>
           </button>`).join('')}
+        <!-- The moment a bystander discovers there is no pen to use is exactly
+             when a volunteer carrying one becomes useful. Without this the flow
+             dead-ends here: every option assumes a device is already in hand. -->
+        <button class="guide__picker-btn guide__picker-btn--none" id="guide-nopen">
+          <span>I don't have one</span>
+          <span class="guide__picker-chevron" aria-hidden="true">›</span>
+        </button>
       </div>
     </div>`;
   root.querySelector('#guide-foot').innerHTML = '';
+
+  // No pen in hand: the guide has nothing to teach, so send them to the screen
+  // whose whole job is obtaining one — the map of nearby epinephrine plus the
+  // volunteer alert. Previously this path simply didn't exist.
+  stage.querySelector('#guide-nopen').addEventListener('click', () => {
+    logIncidentEvent('No auto-injector available — looking for one nearby');
+    navigate('find');
+  });
 
   stage.querySelectorAll('[data-device]').forEach((b) =>
     b.addEventListener('click', () => {

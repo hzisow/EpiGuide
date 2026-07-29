@@ -11,12 +11,21 @@ import { initMedicHandoff } from './screens/medicHandoff.js';
 import { initOptIn, teardownOptIn } from './screens/optIn.js';
 import { initIncidentSummary } from './screens/incidentSummary.js';
 import { icons } from './icons.js';
+import {
+  installNativeGeolocation, installExternalLinkHandler, onLocalNotificationTap,
+} from './native.js';
 
 export const state = {
   currentScreen: 'find', // find | recognize | guide | dispatch | checklist |
                          // responderAlert | firstResponderView | medicHandoff |
                          // incidentSummary
-  recognize: { result: null },            // null | 'match' | 'noMatch'
+  // `result` is the CLINICAL verdict and nothing else: null until a scan has
+  // actually produced one, then 'match' (visible signs) or 'noMatch' (none).
+  // `revealed` is the separate UI latch for "the result sheet is on screen".
+  // These were one field, which meant simply opening the tab and letting the
+  // reveal timer fire marked the scan 'match' — and volunteerCard.js reads that
+  // to tell real responders "Likely anaphylaxis". Keep them apart.
+  recognize: { result: null, revealed: false },
   guide: { currentStep: 1, device: null, deviceLocked: false }, // device: which injector's steps
   checklist: { checkedItemIds: [] },
   dispatch: { epinephrineGivenAt: null }, // Date, set when Guide step 6 completes
@@ -52,6 +61,7 @@ export function resetIncident() {
   state.incident.events = [];
   loggedOnceKeys.clear();
   state.recognize.result = null;
+  state.recognize.revealed = false;
   state.guide.currentStep = 1;
   state.guide.device = null;
   state.guide.deviceLocked = false;
@@ -204,6 +214,13 @@ window.EpiGuide = { navigate, state };
 
 // Boot.
 function boot() {
+  // Native shell only — all three are no-ops in a browser, so the web build
+  // boots exactly as before. The geolocation shim must be installed before any
+  // screen can call navigator.geolocation.getCurrentPosition.
+  installNativeGeolocation();
+  installExternalLinkHandler();
+  onLocalNotificationTap((alertId) => routeToIncomingAlert(alertId));
+
   buildTabBar();
   // Show the first screen immediately (no animation on cold start).
   const first = state.currentScreen;

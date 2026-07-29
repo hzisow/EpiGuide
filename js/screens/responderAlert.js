@@ -29,12 +29,12 @@ function build() {
 
         <div class="card info-card">
           <div class="info-row">${icons.mapPin()}<span id="ra-loc">Location shared when you accept</span></div>
-          <div class="info-row">${icons.clock()}<span id="ra-eta">Tap to navigate</span></div>
+          <div class="info-row">${icons.route()}<span id="ra-dist">Distance unknown</span></div>
           <div class="info-row">${icons.user()}<span id="ra-note">Possible anaphylaxis</span></div>
         </div>
 
         <div class="responder__actions">
-          <button class="btn btn--primary btn--block" id="ra-help">${icons.navigation()} I can help — Navigate</button>
+          <button class="btn btn--primary btn--block" id="ra-help">${icons.navigation()} I can help</button>
           <button class="btn btn--secondary btn--block" id="ra-cant">Can't make it</button>
         </div>
         <p class="responder__caption">Your response helps close the gap before EMS arrives.</p>
@@ -51,6 +51,7 @@ function render() {
   const alert = state.incomingAlert;
   const noteEl = root.querySelector('#ra-note');
   const metaEl = root.querySelector('#ra-meta');
+  const distEl = root.querySelector('#ra-dist');
 
   if (!alert) {
     // No live alert — honest empty state (this screen is normally reached from a
@@ -58,28 +59,30 @@ function render() {
     metaEl.textContent = 'No active alert right now';
     noteEl.textContent = 'You’ll be notified when someone nearby needs help';
     root.querySelector('#ra-loc').textContent = 'Location shares when you accept an alert';
-    root.querySelector('#ra-eta').textContent = '—';
+    distEl.textContent = 'No distance to show';
     return;
   }
 
   noteEl.textContent = alert.patient_note || 'Possible anaphylaxis';
   root.querySelector('#ra-loc').textContent = 'Exact location unlocks when you accept';
+  distEl.textContent = 'Measuring how far away you are…';
 
   const tick = () => {
     const secs = Math.max(0, Math.round((Date.now() - new Date(alert.created_at).getTime()) / 1000));
-    metaEl.textContent = secs < 60 ? `Nearby · Sent ${secs}s ago` : `Nearby · Sent ${Math.round(secs / 60)} min ago`;
+    metaEl.textContent = secs < 60 ? `Sent ${secs}s ago` : `Sent ${Math.round(secs / 60)} min ago`;
   };
   tick();
   agoTimer = setInterval(tick, 1000);
 
-  // Fill in a straight-line distance once we have this responder's position.
+  // Real haversine distance from this device to the patient. Labelled as a
+  // straight line on purpose: it is NOT an ETA and NOT a walking distance — we
+  // have no route and therefore no honest way to state travel time.
   net().then((n) => n.getPosition()
     .then((coords) => {
-      const m = n.haversineMeters(coords.lat, coords.lng, alert.lat, alert.lng);
-      const mi = m / 1609.34;
-      metaEl.textContent = `${mi < 0.1 ? '< 0.1' : mi.toFixed(1)} mi away · ` + metaEl.textContent.split('· ')[1];
+      const mi = n.haversineMeters(coords.lat, coords.lng, alert.lat, alert.lng) / 1609.34;
+      distEl.textContent = `${mi < 0.1 ? '< 0.1' : mi.toFixed(1)} mi away in a straight line (not travel time)`;
     })
-    .catch(() => {}));
+    .catch(() => { distEl.textContent = 'Couldn’t measure the distance from here'; }));
 }
 
 async function accept() {
@@ -97,7 +100,7 @@ async function accept() {
     clearInterval(agoTimer); agoTimer = null;
     navigate('firstResponderView');
   } catch (e) {
-    btn.removeAttribute('aria-disabled'); btn.innerHTML = `${icons.navigation()} I can help — Navigate`;
+    btn.removeAttribute('aria-disabled'); btn.innerHTML = `${icons.navigation()} I can help`;
     root.querySelector('#ra-meta').textContent = 'Could not accept. Check your connection and try again.';
   }
 }

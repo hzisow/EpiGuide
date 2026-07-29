@@ -2,12 +2,22 @@
 //
 // This does NOT diagnose. It measures two real, explainable visible cues and
 // flags deviations, hedged in copy elsewhere:
-//   • lip/face swelling  — lip height relative to eye spacing, and eyelid
+//   • lip/eye CHANGE     — lip height relative to eye spacing, and eyelid
 //                          aperture, compared to this session's own baseline
 //                          (captured from the first steady frames).
 //   • flushing           — malar (cheek) red-chroma elevated vs the forehead
 //                          in the SAME frame (a within-frame measure that needs
 //                          no baseline and is robust to camera white-balance).
+//
+// STRUCTURAL LIMIT OF THE SWELLING MEASURE — read before writing any UI copy:
+// the baseline is the FIRST ~12 FRAMES OF THE FACE BEING SCANNED. If that face
+// is already swollen, the swollen state becomes "normal" and SWELL_LIP can
+// never trip. So this detects swelling that WORSENS during the ~2 s scan, and
+// nothing else. A true personal baseline would need a photo of the person
+// before the reaction, which we do not have and cannot get mid-emergency — so
+// the fix is honest copy, not a threshold tweak. Anything in the UI that says
+// "checks for swelling" or "no swelling detected" is a lie; see the badge text
+// and result copy in js/screens/recognize.js.
 //
 // All indices are standard 468-point Face Mesh vertices.
 

@@ -10,7 +10,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
   SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY, APPROX_DECIMALS, GOOGLE_CLIENT_ID,
+  GOOGLE_IOS_CLIENT_ID,
 } from './config.js';
+import { isNative, getPlugin } from './native.js';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   // detectSessionInUrl is off: sign-in no longer round-trips through a redirect,
@@ -57,6 +59,37 @@ function loadGis() {
   }));
 }
 
+// The one place a Google ID token becomes a Supabase session. Both the web
+// (GIS) and native (SocialLogin) paths funnel through here — same provider,
+// same call, one code path.
+// `nonce` is the RAW nonce, passed only on the native path. Supabase hashes it
+// and compares against the `nonce` claim inside the ID token, so Google must
+// have been given the hashed form. GIS (web) issues tokens with no nonce claim
+// at all, so the web path omits it — passing one there would fail the same
+// "should either both exist or not" check in the opposite direction.
+async function exchangeGoogleIdToken(idToken, nonce) {
+  if (!idToken) throw new Error('No credential returned from Google.');
+  const { error } = await supabase.auth.signInWithIdToken({
+    provider: 'google',
+    token: idToken,
+    ...(nonce ? { nonce } : {}),
+  });
+  if (error) throw error;
+}
+
+// Google's iOS SDK always embeds a nonce claim in the ID token, so the native
+// path has to generate one and hand the same value to both sides.
+function randomNonce() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function sha256Hex(input) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 // Renders Google's official button into `container`. `onSignedIn` fires after
 // the Supabase session exists; `onError` receives any failure.
 export async function renderGoogleSignIn(container, { onSignedIn, onError } = {}) {
@@ -71,12 +104,7 @@ export async function renderGoogleSignIn(container, { onSignedIn, onError } = {}
     use_fedcm_for_prompt: true,
     callback: async (response) => {
       try {
-        if (!response?.credential) throw new Error('No credential returned from Google.');
-        const { error } = await supabase.auth.signInWithIdToken({
-          provider: 'google',
-          token: response.credential,
-        });
-        if (error) throw error;
+        await exchangeGoogleIdToken(response?.credential);
         onSignedIn?.();
       } catch (err) {
         onError?.(err);
@@ -96,7 +124,73 @@ export async function renderGoogleSignIn(container, { onSignedIn, onError } = {}
   });
 }
 
+// --- native (Capacitor) Google sign-in ---------------------------------------
+//
+// GIS refuses to run inside an embedded webview, so on iOS we hand off to the
+// native Google Sign-In SDK via @capgo/capacitor-social-login and feed the
+// resulting ID token into the SAME signInWithIdToken exchange the web uses.
+// (Not signInWithOAuth — that redirects through the *.supabase.co URL.)
+
+const IOS_CLIENT_ID_PLACEHOLDER = 'REPLACE_WITH_IOS_CLIENT_ID';
+
+export function nativeGoogleConfigured() {
+  return !!GOOGLE_IOS_CLIENT_ID && !GOOGLE_IOS_CLIENT_ID.includes(IOS_CLIENT_ID_PLACEHOLDER);
+}
+
+export async function signInWithGoogleNative() {
+  const SocialLogin = getPlugin('SocialLogin');
+  if (!SocialLogin) {
+    throw new Error('Native Google sign-in is unavailable in this build (SocialLogin plugin missing).');
+  }
+  // Fail LOUDLY when the placeholder is still in place, so "not configured" is
+  // never mistaken for "broken" while testing in the simulator.
+  if (!nativeGoogleConfigured()) {
+    throw new Error(
+      'iOS Google client ID not configured — set GOOGLE_IOS_CLIENT_ID in js/config.js '
+      + 'and the matching com.googleusercontent.apps.<id> entry in Info.plist.',
+    );
+  }
+
+  await SocialLogin.initialize({
+    google: {
+      iOSClientId: GOOGLE_IOS_CLIENT_ID,
+      // The *web* client ID is Google's "server client ID": it's the audience
+      // Supabase validates the ID token against.
+      iOSServerClientId: GOOGLE_CLIENT_ID,
+      mode: 'online',
+    },
+  });
+
+  // The SAME nonce goes to Google and to Supabase. Google echoes it verbatim
+  // into the token's `nonce` claim, and Supabase SHA-256-hashes whatever nonce
+  // it is given before comparing — so Google gets the hash and Supabase gets the
+  // raw value. Omitting the nonce entirely fails too ("Passed nonce and nonce in
+  // id_token should either both exist or not"), because Google's iOS SDK always
+  // embeds a nonce claim of its own.
+  const rawNonce = randomNonce();
+  const hashedNonce = await sha256Hex(rawNonce);
+
+  // forcePrompt is REQUIRED, not a UX preference. Without it the plugin takes
+  // its `hasPreviousSignIn()` branch and calls restorePreviousSignIn(), which
+  // accepts no nonce and returns a cached token still carrying the nonce from
+  // the original interactive sign-in — so ours could never match.
+  const login = await SocialLogin.login({
+    provider: 'google',
+    options: { nonce: hashedNonce, forcePrompt: true },
+  });
+  // The token is nested under `result` — `login.idToken` is undefined.
+  const idToken = login?.result?.idToken;
+  if (!idToken) throw new Error('Google did not return an ID token.');
+  await exchangeGoogleIdToken(idToken, rawNonce);
+}
+
 export async function signOut() {
+  // Clear the native Google session too, otherwise the next sign-in silently
+  // reuses the same account with no chooser.
+  const SocialLogin = getPlugin('SocialLogin');
+  if (SocialLogin) {
+    try { await SocialLogin.logout({ provider: 'google' }); } catch (_) {}
+  }
   await supabase.auth.signOut();
 }
 
@@ -131,8 +225,16 @@ function coarse(v) {
 }
 
 // Alerting radius — a volunteer farther than this can't bring a pen in time, so
-// they aren't alerted. 4.5 miles ≈ 7242 m. Mirrors the server-side push fan-out.
-export const ALERT_RADIUS_M = 7242;
+// they aren't alerted. 0.4 miles ≈ 644 m: roughly an 8-minute walk, inside the
+// window where epinephrine still changes the outcome.
+//
+// This filter runs on EXACT coordinates on both sides (the raiser's position
+// from getPosition(), and the responder's own from goAvailable()), so it is
+// accurate at this scale. Note the public `responders` table is deliberately
+// coarsened to APPROX_DECIMALS (~1.1 km), which is COARSER than this radius —
+// so any server-side fan-out reading that table cannot filter this tightly and
+// must use `responder_locations` instead.
+export const ALERT_RADIUS_M = 644;
 
 export function haversineMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -142,6 +244,58 @@ export function haversineMeters(lat1, lng1, lat2, lng2) {
   const a = Math.sin(dLat / 2) ** 2 +
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// Worst-case distance between a responder's REAL position and the coarsened one
+// published in the `responders` table. Snapping to APPROX_DECIMALS (2 dp) moves a
+// point by up to half a grid cell in each axis, i.e. ~0.79 km at the equator.
+// Anything comparing against those public coordinates has to widen its radius by
+// this much or it will wrongly conclude that a genuinely close volunteer is out
+// of range.
+export function approxGridErrorMeters(lat) {
+  const halfCellDeg = 0.5 * 10 ** -APPROX_DECIMALS;
+  const dLat = halfCellDeg * 111320;
+  const dLng = halfCellDeg * 111320 * Math.cos((lat * Math.PI) / 180);
+  return Math.hypot(dLat, dLng);
+}
+
+/**
+ * Patient-side, best-effort answer to "is any volunteer actually in range?".
+ *
+ * This can only read the PUBLIC `responders` table, whose coordinates are
+ * coarsened to a ~1.1 km grid — coarser than ALERT_RADIUS_M itself. So the
+ * radius is widened by approxGridErrorMeters() and the answer is APPROXIMATE by
+ * construction; callers must say so and must never present it as a precise
+ * count of who is nearby. (The server-side fan-out in the notify-responders
+ * Edge Function reads exact coordinates from `responder_locations` and is the
+ * authoritative check — this is the fallback for when that answer isn't
+ * available, e.g. an anonymous raiser who can't invoke the function.)
+ *
+ * Returns { status, count, radiusM }:
+ *   'some'    — at least one available volunteer is plausibly within range
+ *   'none'    — no available volunteer is VISIBLE to us near here. Note this is
+ *               also what RLS returns if it declines to show other people's
+ *               rows, which is exactly why the copy says "none showing as
+ *               available" rather than "nobody is there".
+ *   'unknown' — the query failed; we know nothing either way.
+ */
+export async function availabilityNear(lat, lng) {
+  const radiusM = ALERT_RADIUS_M + approxGridErrorMeters(lat);
+  let selfId = null;
+  try { selfId = (await currentUser())?.id || null; } catch (_) {}
+
+  const { data, error } = await supabase.from('responders')
+    .select('user_id,approx_lat,approx_lng')
+    .eq('is_available', true);
+  if (error || !Array.isArray(data)) return { status: 'unknown', count: 0, radiusM };
+
+  const count = data.reduce((acc, r) => {
+    if (selfId && r.user_id === selfId) return acc;      // don't count the raiser
+    const rlat = Number(r.approx_lat), rlng = Number(r.approx_lng);
+    if (!Number.isFinite(rlat) || !Number.isFinite(rlng)) return acc;
+    return haversineMeters(lat, lng, rlat, rlng) <= radiusM ? acc + 1 : acc;
+  }, 0);
+  return { status: count > 0 ? 'some' : 'none', count, radiusM };
 }
 
 // ---------------------------------------------------------------------------
@@ -261,12 +415,46 @@ function urlBase64ToUint8Array(base64String) {
   return out;
 }
 
+// Copy shown on the opt-in screen in the native shell. Deliberately blunt: the
+// iOS build genuinely CANNOT deliver closed-app alerts yet, and a toggle that
+// implies otherwise is worse than no toggle in an emergency app.
+export const NATIVE_PUSH_NOTICE =
+  'Closed-app alerts are not active on iOS yet — you’ll only be alerted while EpiGuide is open.';
+
 export function pushSupported() {
+  // A Capacitor WKWebView has no PushManager and no VAPID web push at all, so
+  // report the truth rather than letting the caller hide a guaranteed failure.
+  // Closed-app alerts on iOS go through APNs instead — see the APNs section of
+  // js/native.js. This stays false either way: it means *web* push specifically.
+  if (isNative()) return false;
   return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+
+// --- native push (APNs) ------------------------------------------------------
+//
+// An APNs device token does NOT fit `push_subscriptions`: that table is web-push
+// shaped ({endpoint, p256dh, auth}, all NOT NULL) and describes a browser
+// subscription, not a device. Native tokens get their own table, `apns_tokens`
+// — see supabase/migrations/20260728000000_apns_tokens.sql (NOT yet applied).
+//
+// Called only from registerForPushNotifications() in js/native.js, which is
+// itself gated behind APNS_ENABLED, so nothing reaches this before enrolment.
+export async function saveApnsToken(deviceToken, platform = 'ios') {
+  const user = await currentUser();
+  if (!user) throw new Error('Sign in first');
+  if (!deviceToken) throw new Error('No APNs device token');
+  const { error } = await supabase.from('apns_tokens').upsert({
+    user_id: user.id,
+    device_token: deviceToken,
+    platform,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'device_token' });
+  if (error) throw error;
 }
 
 // Registers this device to receive alerts even when the app is closed.
 export async function enablePush() {
+  if (isNative()) throw new Error(NATIVE_PUSH_NOTICE);
   if (!pushSupported()) throw new Error('This device or browser does not support push alerts');
   const user = await currentUser();
   if (!user) throw new Error('Sign in first');
@@ -311,11 +499,18 @@ export async function raiseAlert({ lat, lng, note }) {
   if (error) throw error;
 
   const alert = { ...row, created_at: new Date().toISOString() };
-  // Fan out web push to nearby available responders (server-side proximity).
-  // If this fails (e.g. anon can't invoke the function), the alert is still
-  // live and open-app responders receive it via realtime.
+  // Fan out push to nearby available responders (server-side proximity, exact
+  // coordinates). If this fails (e.g. anon can't invoke the function), the alert
+  // is still live and open-app responders receive it via realtime.
+  //
+  // The RESULT is kept: it is the only authoritative answer to "did this alert
+  // actually reach anybody?", which the UI needs so it never implies help is
+  // coming when nothing was reached. `null` means we don't know.
+  alert.fanout = null;
   try {
-    await supabase.functions.invoke('notify-responders', { body: { alert_id: alert.id } });
+    const { data, error } = await supabase.functions.invoke('notify-responders', { body: { alert_id: alert.id } });
+    if (error) throw error;
+    alert.fanout = data || null;
   } catch (e) {
     console.warn('notify-responders failed (alert still live for open apps):', e);
   }

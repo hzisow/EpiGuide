@@ -9,6 +9,7 @@
 
 import { icons } from './icons.js';
 import { recognizeVariants, parseInjectorText, mergeGuesses } from './ocr.js';
+import { isNative, syncPenExpiryReminders } from './native.js';
 
 let netP;
 const net = () => (netP ||= import('./net.js'));
@@ -53,15 +54,28 @@ export function teardownEpipens() {
   closeOverlay();
 }
 
-async function refresh() {
+async function refresh({ requestNotificationPermission = false } = {}) {
   const list = container?.querySelector('#ep-list');
   if (!list) return;
   let pens = [];
   try { const n = await net(); pens = await n.listEpipens(); }
   catch (_) { list.innerHTML = `<div class="optin__note">Couldn't load your pens.</div>`; return; }
 
+  // Keep the scheduled expiry reminders matching what's actually saved. Native
+  // only — on the web nothing can schedule a future notification, which is why
+  // the web copy below doesn't promise one. No-ops off the native shell.
+  syncPenExpiryReminders(
+    pens.map((p) => ({
+      id: p.id,
+      expiration_date: p.expiration_date,
+      label: BRANDS.find((b) => b.v === p.brand)?.label || p.brand || 'Your auto-injector',
+    })),
+    { requestPermission: requestNotificationPermission },
+  ).catch(() => {});
+
   if (pens.length === 0) {
-    list.innerHTML = `<div class="optin__note">No pens yet. Scan one so the network knows what you carry — and we'll remind you before it expires.</div>`;
+    list.innerHTML = `<div class="optin__note">No pens yet. Scan one so the network knows what you carry${
+      isNative() ? ` — and we'll remind you before it expires.` : `, and to track its expiry date here.`}</div>`;
     return;
   }
   list.innerHTML = pens.map(renderRow).join('');
@@ -419,7 +433,9 @@ async function savePen() {
     const injector = BRANDS.find((b) => b.v === brand)?.injector || 'other';
     try { await n.saveProfile({ display_name: 'EpiGuide volunteer', injector_type: injector, dose }); } catch (_) {}
     closeOverlay();
-    await refresh();
+    // Saving a pen is the explicit user action that earns the notification
+    // prompt — that's the moment we're about to promise a real reminder.
+    await refresh({ requestNotificationPermission: true });
   } catch (e) {
     btn.textContent = t;
     err.textContent = (e && e.message) === 'Sign in first'

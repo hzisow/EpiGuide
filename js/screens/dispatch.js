@@ -19,6 +19,7 @@ import { state, navigate, logIncidentEvent, logIncidentEventOnce } from '../app.
 import { icons } from '../icons.js';
 import { paintMapBackground, mountMap, reverseGeocode } from '../map.js';
 import { mountVolunteerCard } from '../volunteerCard.js';
+import { isNative, nativeShare } from '../native.js';
 
 let root, built = false;
 let stopwatchTimer = null;
@@ -32,8 +33,15 @@ export function initDispatch() {
   startStopwatch();
   // Live volunteer status. The alert itself is raised from the Find screen;
   // if one is active this shows responders, otherwise it offers the button.
+  // By the time anyone reaches Dispatch the dose has been given, so "alert
+  // volunteers to bring a pen" is the wrong ask — the right one is a SECOND
+  // dose. Symptoms can rebound before EMS arrives and most people carry only
+  // one pen, which is the same risk the "may need a second dose" line above
+  // already warns about.
   volTeardown = mountVolunteerCard(root.querySelector('#disp-vol'), {
-    lead: 'No auto-injector nearby? Alert people close by who carry epinephrine — separate from your 911 call.',
+    lead: 'Symptoms can come back before EMS arrives, and a second dose may be needed. '
+      + 'If you don\'t have another pen, alert people nearby who carry one.',
+    cta: 'Ask nearby volunteers for a second dose',
   });
 }
 
@@ -143,7 +151,15 @@ async function shareStatus() {
   const text = lines.join('\n');
 
   try {
-    if (navigator.share) {
+    // navigator.share is unreliable inside a WKWebView, so the native shell
+    // goes straight to the Capacitor share sheet. Both reject on cancel, and
+    // both fall through to the SMS composer if unavailable.
+    if (isNative()) {
+      if (await nativeShare({ title: 'Emergency — anaphylaxis', text })) {
+        logIncidentEvent('Status shared with a contact');
+        return;
+      }
+    } else if (navigator.share) {
       await navigator.share({ title: 'Emergency — anaphylaxis', text });
       logIncidentEvent('Status shared with a contact');
       return;
@@ -153,6 +169,8 @@ async function shareStatus() {
     return;
   }
   // Fallback: open SMS composer with the body pre-filled (no recipient).
+  // Capacitor's navigation delegate hands sms:/tel: to UIApplication.open, so
+  // this still escapes the webview in the native shell.
   window.location.href = `sms:?&body=${encodeURIComponent(text)}`;
   logIncidentEvent('Status shared with a contact');
 }
