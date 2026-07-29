@@ -33,8 +33,15 @@ export function initDispatch() {
   startStopwatch();
   // Live volunteer status. The alert itself is raised from the Find screen;
   // if one is active this shows responders, otherwise it offers the button.
+  // By the time anyone reaches Dispatch the dose has been given, so "alert
+  // volunteers to bring a pen" is the wrong ask — the right one is a SECOND
+  // dose. Symptoms can rebound before EMS arrives and most people carry only
+  // one pen, which is the same risk the "may need a second dose" line above
+  // already warns about.
   volTeardown = mountVolunteerCard(root.querySelector('#disp-vol'), {
-    lead: 'No auto-injector nearby? Alert people close by who carry epinephrine — separate from your 911 call.',
+    lead: 'Symptoms can come back before EMS arrives, and a second dose may be needed. '
+      + 'If you don\'t have another pen, alert people nearby who carry one.',
+    cta: 'Ask nearby volunteers for a second dose',
   });
 }
 

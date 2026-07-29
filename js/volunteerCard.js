@@ -26,9 +26,16 @@ let waitTimer = null;
 // this instead of re-asserting "waiting…", so a message that has already been
 // downgraded to "call 911" can never be silently upgraded again.
 let idle = { text: '', urgent: false };
+let ctaLabel = 'Alert nearby volunteers';
 
-export function mountVolunteerCard(container, { lead } = {}) {
+// `cta` exists because the button's meaning changes with where the card sits.
+// On Find it is "I have no pen, bring me one". On Dispatch the patient has
+// already been injected, so the only honest reason to summon a volunteer is a
+// SECOND dose — anaphylaxis can rebound and most people carry one pen. Saying
+// "Alert nearby volunteers" there reads as nonsense seconds after injecting.
+export function mountVolunteerCard(container, { lead, cta } = {}) {
   activeContainer = container;
+  ctaLabel = cta || 'Alert nearby volunteers';
   container.innerHTML = `
     <div class="card vol-card">
       <div class="vol-card__head">
@@ -39,7 +46,7 @@ export function mountVolunteerCard(container, { lead } = {}) {
         ${lead || 'No auto-injector on hand? Alert people nearby who carry epinephrine and have opted in to help.'}
       </p>
       <div class="vol-list" data-vol-list></div>
-      <button class="btn btn--vol btn--block" data-vol-btn>${icons.bell()} Alert nearby volunteers</button>
+      <button class="btn btn--vol btn--block" data-vol-btn>${icons.bell()} ${ctaLabel}</button>
     </div>`;
 
   container.querySelector('[data-vol-btn]').addEventListener('click', () => raise(container));
@@ -66,7 +73,7 @@ async function raise(container) {
     await attach(container, state.activeAlert);
   } catch (e) {
     btn.removeAttribute('aria-disabled');
-    btn.innerHTML = `${icons.bell()} Alert nearby volunteers`;
+    btn.innerHTML = `${icons.bell()} ${ctaLabel}`;
     const msg = (e && e.message) || String(e);
     status.textContent = /denied|permission|location/i.test(msg)
       ? 'Location needed to alert nearby volunteers. Allow location and try again.'
