@@ -1,9 +1,9 @@
 // notify-responders — fan an active alert out to every nearby responder, over
 // BOTH transports: web push (browsers / installed PWA) and APNs (native iOS).
 //
-// NOT YET DEPLOYED. This file supersedes the version currently live on the
-// project (which is web-push only and still uses the old 4.5-mile radius).
-// Deploy with:  supabase functions deploy notify-responders
+// DEPLOYED as version 4 on project lpgrbpblbtpyigzsrhgu. Superseded the
+// web-push-only version that still used the old 4.5-mile radius.
+// Redeploy with:  supabase functions deploy notify-responders
 //
 // Required secrets (supabase secrets set ...):
 //   APNS_KEY_ID       — 10-char Key ID of the APNs Auth Key (.p8) from the

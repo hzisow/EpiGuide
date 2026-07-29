@@ -1,8 +1,8 @@
 -- apns_tokens — APNs device tokens for the native iOS shell.
 --
--- NOT YET APPLIED. Run this only once the Apple Developer enrolment is done and
--- you are ready to turn on APNS_ENABLED in js/native.js:
---     supabase db push          (or paste into the SQL editor)
+-- APPLIED to project lpgrbpblbtpyigzsrhgu. The table is empty and stays empty
+-- until APNS_ENABLED is flipped in js/native.js after Apple enrolment; nothing
+-- writes to it before then.
 --
 -- Why a separate table instead of reusing push_subscriptions:
 --   push_subscriptions is web-push shaped — (endpoint, p256dh, auth), all NOT
