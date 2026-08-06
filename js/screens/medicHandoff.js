@@ -4,7 +4,9 @@
 // injection, the symptoms the user actually checked, and the reverse-geocoded
 // address of their real GPS location.
 
-import { state, navigate, logIncidentEvent, logIncidentEventOnce } from '../app.js';
+import {
+  state, navigate, logIncidentEvent, logIncidentEventOnce, call911Summary,
+} from '../app.js';
 import { icons } from '../icons.js';
 import { paintMapBackground, mountMap, reverseGeocode } from '../map.js';
 import { checklistCategories } from '../data/checklistItems.js';
@@ -31,6 +33,10 @@ function build() {
           <div class="summary-row">
             <span class="eyebrow label">Epinephrine given</span>
             <span class="value" id="mh-epi">—</span>
+          </div>
+          <div class="summary-row">
+            <span class="eyebrow label">911</span>
+            <span class="value" id="mh-911">—</span>
           </div>
           <div class="summary-row">
             <span class="eyebrow label">Symptoms observed</span>
@@ -67,6 +73,11 @@ function render() {
   root.querySelector('#mh-epi').textContent = epi
     ? `${formatTime(epi)} (1 dose, thigh)`
     : 'Not yet given';
+
+  // 911 — stated at the top of the handoff because it is the first thing
+  // arriving EMS need to know, and because "the dialer was opened" must never
+  // read to them as "a call was placed".
+  root.querySelector('#mh-911').textContent = call911Summary();
 
   // Symptoms — the boxes the user actually checked, not a canned list.
   const ids = state.checklist.checkedItemIds || [];
@@ -106,6 +117,7 @@ async function shareTimeline() {
     'EMS HANDOFF — anaphylaxis',
     '',
     `Epinephrine given: ${epi ? `${formatTime(epi)}${deviceLabel ? ` (${deviceLabel})` : ''}` : 'Not yet given'}`,
+    `911: ${call911Summary()}`,
     `Symptoms observed: ${symptomLabels.length ? symptomLabels.join(', ') : 'Not recorded'}`,
     `Patient location: ${addr || 'Not recorded'}`,
     '',

@@ -498,6 +498,36 @@
   color: var(--color-gray-text);
   text-align: center;
 }
+/* "I'm on the line with 911" — the ONLY control that can record a real call.
+   Deliberately quiet: it sits under the dialer button mid-emergency and must
+   never compete with it for attention. */
+.dispatch__call-confirm {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%;
+  margin-top: var(--space-2);
+  padding: 9px 12px;
+  border: 1px solid var(--color-gray-divider);
+  border-radius: var(--radius-sm);
+  background: var(--color-white);
+  color: var(--color-gray-text);
+  font-size: 13px; font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.dispatch__call-confirm:active { background: var(--color-gray-bg); }
+.dispatch__call-confirm .icon { width: 16px; height: 16px; flex: 0 0 auto; }
+.dispatch__call-confirmed {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  margin: var(--space-2) 0 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(47, 158, 68, 0.10);
+  color: var(--color-green);
+  font-size: 13px; font-weight: 600;
+}
+.dispatch__call-confirmed .icon { width: 16px; height: 16px; flex: 0 0 auto; }
+
 .dispatch__map {
   position: relative;
   height: 180px;
@@ -812,6 +842,17 @@
 .vol-row__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-green); flex: 0 0 auto; }
 /* "Nobody is coming — call 911". Must not read as ordinary muted body copy. */
 .vol-status--urgent { color: var(--color-red-dark); font-weight: 600; }
+/* Standing an alert down. Secondary to everything else on the card — it only
+   matters once help has actually arrived. */
+.vol-end:empty { display: none; }
+.vol-end { margin-top: 12px; }
+.vol-end__note { margin: 0; font-size: 13px; line-height: 1.4; color: var(--color-gray-text); }
+.vol-end__row { display: flex; gap: 8px; margin-top: 10px; }
+.vol-end__btn { flex: 1; height: 42px; font-size: 14px; }
+.vol-end__error {
+  margin: 10px 0 0; font-size: 13px; line-height: 1.4;
+  font-weight: 600; color: var(--color-red-dark);
+}
 
 .btn--vol { margin-top: 14px; background: var(--color-blue); color: #fff; }
 .btn--vol:active { background: #1971C2; }

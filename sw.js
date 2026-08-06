@@ -4,7 +4,7 @@
 // offline / slow-connection fallback. MediaPipe/fonts CDNs are left to the
 // network (they degrade gracefully in the app).
 
-const CACHE = 'epiguide-v38';
+const CACHE = 'epiguide-v39';
 const ASSETS = [
   './',
   './index.html',
@@ -32,6 +32,7 @@ const ASSETS = [
   './js/data/guideSteps.js',
   './js/data/checklistItems.js',
   './js/screens/find.js',
+  './js/screens/incidentSummary.js',
   './js/screens/recognize.js',
   './js/screens/guide.js',
   './js/screens/dispatch.js',
@@ -45,18 +46,6 @@ const ASSETS = [
   // Guide step animation loops (Remotion-rendered) — cached so the guide
   // animates offline; SVG pictograms remain the fallback. WebM is preferred
   // by the <video> sources; MP4 covers browsers without VP9.
-  './media/guide/confirm.webm',
-  './media/guide/cap.webm',
-  './media/guide/thigh.webm',
-  './media/guide/push.webm',
-  './media/guide/hold.webm',
-  './media/guide/remove.webm',
-  './media/guide/confirm.mp4',
-  './media/guide/cap.mp4',
-  './media/guide/thigh.mp4',
-  './media/guide/push.mp4',
-  './media/guide/hold.mp4',
-  './media/guide/remove.mp4',
 ];
 
 self.addEventListener('install', (e) => {

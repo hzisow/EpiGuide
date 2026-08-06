@@ -5,7 +5,7 @@
 //
 // net.js (Supabase) stays lazily imported so the core flow works offline.
 
-import { state, logIncidentEventOnce } from './app.js';
+import { state, logIncidentEvent, logIncidentEventOnce } from './app.js';
 import { icons } from './icons.js';
 import { injectorToDevice, guides } from './data/guideSteps.js';
 
@@ -28,6 +28,10 @@ let waitTimer = null;
 let idle = { text: '', urgent: false };
 let ctaLabel = 'Alert nearby volunteers';
 
+// Set once an alert has been ended, so the card keeps saying so after it is
+// re-mounted on the other screen. Cleared when a new alert is raised.
+let endedNote = '';
+
 // `cta` exists because the button's meaning changes with where the card sits.
 // On Find it is "I have no pen, bring me one". On Dispatch the patient has
 // already been injected, so the only honest reason to summon a volunteer is a
@@ -40,19 +44,31 @@ export function mountVolunteerCard(container, { lead, cta } = {}) {
     <div class="card vol-card">
       <div class="vol-card__head">
         <span class="eyebrow" style="color:var(--color-blue);">Nearby volunteers</span>
-        <span class="pill pill--blue">Live network</span>
+        <!-- A "Live network" pill used to sit here. It was static markup with
+             nothing behind it: no connection state, no subscription, no
+             responder count. At this point in the flow no realtime channel is
+             even open — one is only opened after an alert is raised — so it
+             asserted liveness that did not exist. Removed rather than faked;
+             the card already reports real status once an alert is live. -->
       </div>
       <p class="body-sm text-muted" data-vol-status>
         ${lead || 'No auto-injector on hand? Alert people nearby who carry epinephrine and have opted in to help.'}
       </p>
       <div class="vol-list" data-vol-list></div>
+      <div class="vol-end" data-vol-end></div>
       <button class="btn btn--vol btn--block" data-vol-btn>${icons.bell()} ${ctaLabel}</button>
     </div>`;
 
   container.querySelector('[data-vol-btn]').addEventListener('click', () => raise(container));
 
   // An alert already went out earlier in this session — show live status.
-  if (state.activeAlert) attach(container, state.activeAlert).catch(() => {});
+  if (state.activeAlert) {
+    attach(container, state.activeAlert).catch(() => {});
+  } else if (endedNote) {
+    // An alert was raised and then ended earlier this session. Say so, and leave
+    // the button available: a second, separate emergency can still need one.
+    setIdle(endedNote);
+  }
 
   return () => { if (unsub) { unsub(); unsub = null; } };
 }
@@ -62,6 +78,8 @@ async function raise(container) {
   const status = container.querySelector('[data-vol-status]');
   btn.setAttribute('aria-disabled', 'true');
   btn.innerHTML = `${icons.bell()} Alerting…`;
+  endedNote = '';
+  paintEnd('');
   try {
     const n = await net();
     const coords = state.location || await n.getPosition();
@@ -94,10 +112,105 @@ async function attach(container, alert) {
     render(n, alert);
   });
 
+  // Offer a way to stand the alert down. Awaited separately so a failure here
+  // can never stop the live status above from rendering.
+  renderEndControls(n, alert).catch(() => {});
+
   // Cached on the alert, so re-mounting the card (Find → Dispatch) doesn't
   // re-run the check or restart the clock.
   if (!alert.reach) alert.reach = await reachOf(n, alert);
   applyReach(alert);
+}
+
+// ---------------------------------------------------------------------------
+// Ending an alert
+// ---------------------------------------------------------------------------
+//
+// Without this the alert stays 'active' forever: net.js exported resolveAlert()
+// but nothing ever called it, so a volunteer who accepted stayed 'en_route' with
+// no way to be stood down, potentially still walking over after EMS had arrived.
+//
+// Two things this UI is careful NOT to imply:
+//   1. That anyone can end an alert. Only the signed-in raiser can — RLS says so
+//      (see canResolveAlert in net.js), and an anonymously raised alert cannot be
+//      ended by anybody. Where that's the case we say it plainly instead of
+//      showing a button that would silently no-op.
+//   2. That ending it TELLS the volunteers. It does not: the responder screens
+//      never subscribe to the alert row, and RLS would filter the resolved row
+//      out of realtime even if they did (see subscribeToAlerts in net.js).
+async function renderEndControls(n, alert) {
+  if (!(await n.canResolveAlert(alert))) {
+    paintEnd(`<p class="vol-end__note">${alert.created_by
+      ? 'This alert can’t be ended from this device.'
+      : 'This alert was raised without signing in, so it can’t be ended from this device.'}
+      If a volunteer is on the way, tell them in person when they arrive.</p>`);
+    return;
+  }
+
+  paintEnd(`
+    <p class="vol-end__note">Once help is here, end the alert so it stops standing as an open call.</p>
+    <div class="vol-end__row">
+      <button class="btn btn--secondary vol-end__btn" data-vol-resolve="resolved">EMS has arrived</button>
+      <button class="btn btn--secondary vol-end__btn" data-vol-resolve="cancelled">Cancel alert</button>
+    </div>
+    <p class="vol-end__error" data-vol-end-error hidden></p>`);
+
+  const host = activeContainer?.querySelector('[data-vol-end]');
+  if (!host) return;
+  host.querySelectorAll('[data-vol-resolve]').forEach((btn) => {
+    btn.addEventListener('click', () => endAlert(n, alert, btn.dataset.volResolve));
+  });
+}
+
+async function endAlert(n, alert, status) {
+  const host = activeContainer?.querySelector('[data-vol-end]');
+  if (!host) return;
+  const btns = [...host.querySelectorAll('[data-vol-resolve]')];
+  const errEl = host.querySelector('[data-vol-end-error]');
+  const labels = btns.map((b) => b.textContent);
+  btns.forEach((b) => { b.setAttribute('aria-disabled', 'true'); });
+  if (errEl) errEl.hidden = true;
+
+  try {
+    await n.resolveAlert(alert.id, status);
+  } catch (e) {
+    // Visibly failed. The alert is still live and still shown as live — the one
+    // outcome we must never produce is a resolve that looks like it worked.
+    btns.forEach((b, i) => { b.removeAttribute('aria-disabled'); b.textContent = labels[i]; });
+    if (errEl) {
+      errEl.textContent = `Could not end the alert — it is still active. ${(e && e.message) || e}`;
+      errEl.hidden = false;
+    }
+    return;
+  }
+
+  // Stop listening: this alert is over.
+  if (unsub) { unsub(); unsub = null; }
+  clearTimeout(waitTimer); waitTimer = null;
+  responders.clear();
+  state.activeAlert = null;
+
+  logIncidentEvent(status === 'cancelled'
+    ? 'Volunteer alert cancelled by the person who raised it'
+    : 'Volunteer alert ended — EMS on scene');
+
+  // Deliberately explicit that volunteers are NOT notified. Anything softer
+  // would be the same class of bug this card is fixing.
+  endedNote = status === 'cancelled'
+    ? 'Alert cancelled. Any volunteer already on the way is not notified — tell them in person if you can.'
+    : 'Alert ended. Any volunteer already on the way is not notified — tell them in person if you can.';
+  setIdle(endedNote);
+  const list = activeContainer?.querySelector('[data-vol-list]');
+  if (list) list.innerHTML = '';
+  paintEnd('');
+  const btn = activeContainer?.querySelector('[data-vol-btn]');
+  if (btn) { btn.hidden = false; btn.removeAttribute('aria-disabled'); btn.innerHTML = `${icons.bell()} ${ctaLabel}`; }
+}
+
+function paintEnd(html) {
+  const host = activeContainer?.isConnected
+    ? activeContainer.querySelector('[data-vol-end]') : null;
+  if (host) host.innerHTML = html;
 }
 
 // Did this alert actually reach anyone? Two sources, most trustworthy first.

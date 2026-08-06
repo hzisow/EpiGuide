@@ -28,13 +28,60 @@ export const state = {
   recognize: { result: null, revealed: false },
   guide: { currentStep: 1, device: null, deviceLocked: false }, // device: which injector's steps
   checklist: { checkedItemIds: [] },
-  dispatch: { epinephrineGivenAt: null }, // Date, set when Guide step 6 completes
+  dispatch: {
+    epinephrineGivenAt: null, // Date, set when Guide step 6 completes
+    // Did a 911 call ACTUALLY happen? See CALL_911_* below. Tapping the tel:911
+    // link only opens the dialer — the user still has to press call and can
+    // cancel — so opening it can never set 'confirmed'. Only the user tapping
+    // "I'm on the line with 911" does.
+    call911: 'none',
+    call911ConfirmedAt: null, // Date, only when call911 === 'confirmed'
+  },
   location: null,                         // { lat, lng } once geolocation resolves
   responderSelfCoords: null,              // this responder's own location (radius filter)
   incomingAlert: null,                    // real alert routed to a responder
   activeAlert: null,                      // real alert this device raised (patient side)
   incident: { events: [] },               // chronological log powering the post-incident summary
 };
+
+// The three honest states of "has 911 actually been called?".
+//
+// Neither the web nor WKWebView exposes any API that reports whether a call
+// connected, so the app must not guess. It knows exactly two things: that the
+// user tapped a tel:911 link (the dialer was OPENED — they may still cancel),
+// and that the user afterwards said, in the app, that they are talking to a
+// dispatcher. Those are different facts and every surface must show them as
+// different facts: EMS reading the handoff screen must never be told a call was
+// placed that never was.
+export const CALL_911_NONE = 'none';
+export const CALL_911_DIALER_OPENED = 'dialer-opened';
+export const CALL_911_CONFIRMED = 'confirmed';
+
+/** 12-hour clock, matching the formatTime() the screens render timestamps with. */
+export function formatClockTime(date) {
+  let h = date.getHours();
+  const m = String(date.getMinutes()).padStart(2, '0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${m} ${ampm}`;
+}
+
+/**
+ * ONE wording for the 911 state, shared by the EMS handoff, the incident
+ * summary and the contact message, so no surface can drift into overclaiming.
+ */
+export function call911Summary() {
+  if (state.dispatch.call911 === CALL_911_CONFIRMED) {
+    const at = state.dispatch.call911ConfirmedAt;
+    return at
+      ? `Called — bystander confirmed talking to a dispatcher at ${formatClockTime(at)}`
+      : 'Called — bystander confirmed talking to a dispatcher';
+  }
+  if (state.dispatch.call911 === CALL_911_DIALER_OPENED) {
+    return 'Dialer opened in the app — call NOT confirmed';
+  }
+  return 'No 911 call recorded on this device';
+}
 
 // Chronological incident timeline. Every entry is something that REALLY
 // happened on this device (a real timestamp, a real tap) — never invented,
@@ -67,6 +114,8 @@ export function resetIncident() {
   state.guide.deviceLocked = false;
   state.checklist.checkedItemIds = [];
   state.dispatch.epinephrineGivenAt = null;
+  state.dispatch.call911 = CALL_911_NONE;
+  state.dispatch.call911ConfirmedAt = null;
   state.activeAlert = null;
 }
 
