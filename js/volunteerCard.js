@@ -44,7 +44,12 @@ export function mountVolunteerCard(container, { lead, cta } = {}) {
     <div class="card vol-card">
       <div class="vol-card__head">
         <span class="eyebrow" style="color:var(--color-blue);">Nearby volunteers</span>
-        <span class="pill pill--blue">Live network</span>
+        <!-- A "Live network" pill used to sit here. It was static markup with
+             nothing behind it: no connection state, no subscription, no
+             responder count. At this point in the flow no realtime channel is
+             even open — one is only opened after an alert is raised — so it
+             asserted liveness that did not exist. Removed rather than faked;
+             the card already reports real status once an alert is live. -->
       </div>
       <p class="body-sm text-muted" data-vol-status>
         ${lead || 'No auto-injector on hand? Alert people nearby who carry epinephrine and have opted in to help.'}

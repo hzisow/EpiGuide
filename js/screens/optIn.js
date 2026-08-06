@@ -16,6 +16,9 @@ import {
 
 let root, built = false;
 let netP, alertUnsub = null;
+// This device's signed-in user id, so the realtime alert feed can skip alerts
+// this very user raised. Set in refresh(), cleared on sign-out.
+let selfUserId = null;
 
 function net() { return (netP ||= import('../net.js')); }
 
@@ -57,6 +60,7 @@ async function refresh() {
     setBody(`<div class="card"><p class="body">Can't reach the network right now. Check your connection and reopen this tab.</p></div>`);
     return;
   }
+  selfUserId = user?.id || null;
   if (!user) return renderSignedOut();
   return renderSignedIn(user);
 }
@@ -277,6 +281,19 @@ async function goUnavailable() {
 function startListening(n) {
   if (alertUnsub) alertUnsub();
   alertUnsub = n.subscribeToAlerts((alert) => {
+    // NEVER alert someone about their own emergency. A volunteer who is opted
+    // in and then raises an alert themselves is, by definition, 0 m from it, so
+    // the distance check below passes trivially — without this guard the
+    // patient's own phone would buzz and then navigate itself off the dispatch
+    // flow onto the "someone near you needs help" screen, mid-emergency.
+    // notify-responders already excludes alert.created_by from the push fan-out;
+    // this is the same rule on the realtime path, which had no such filter.
+    // Two conditions because a signed-out bystander raises alerts with a null
+    // created_by — for them, matching the alert we ourselves raised is the only
+    // signal available.
+    if (selfUserId && alert.created_by === selfUserId) return;
+    if (state.activeAlert && alert.id === state.activeAlert.id) return;
+
     // The realtime channel (gated by RLS) reaches every available responder;
     // enforce the 0.4-mile alerting radius here by true distance, mirroring the
     // server-side push fan-out. If we don't yet know our own position, allow it.
