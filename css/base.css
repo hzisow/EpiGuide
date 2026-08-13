@@ -7,15 +7,16 @@
 [hidden] { display: none !important; }
 html, body { margin: 0; padding: 0; }
 html { height: 100%; }
-/* Lock the app to the SMALL viewport (svh) — the height with the browser
-   toolbars showing. The page itself never scrolls (screens scroll internally),
-   so Safari's toolbar never hides, and svh reserves room for it: bottom-anchored
-   UI (e.g. the checklist "Continue to Guide" button) is never covered by the
-   toolbar. Falls back to vh, then dvh, on browsers that lack svh. */
+/* Lock the app to the DYNAMIC viewport (dvh) — the currently visible area.
+   This page never scrolls (body is fixed, screens scroll internally), so in
+   Safari the toolbar never auto-hides and dvh stays equal to svh: bottom
+   controls (e.g. the checklist "Continue to Guide" button) are never covered.
+   Installed to the Home Screen there is no toolbar at all, so dvh is the whole
+   screen — whereas svh stopped short and left a dead strip at the bottom that
+   pushed the floating tab bar up. Falls back to vh where dvh is unsupported. */
 body {
   height: 100vh;
   height: 100dvh;
-  height: 100svh;
   overflow: hidden;
   position: fixed;
   inset: 0;
@@ -25,11 +26,10 @@ body {
 html {
   font-family: var(--font-family);
   color: var(--color-ink);
-  /* White by default so the safe-area strip under the home indicator blends with
-     the app when installed to the Home Screen (standalone). The app frame is
-     exactly 100svh, which excludes that strip — with a dark page behind it, it
-     showed as a black bar. The dark surround is restored on wide screens below,
-     where it deliberately frames the centered phone-width column. */
+  /* White by default, so nothing dark can show through around the app on a
+     phone (this previously rendered as a black bar under the home indicator).
+     The dark surround is restored on wide screens below, where it deliberately
+     frames the centered phone-width column. */
   background: var(--color-white);
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
@@ -59,21 +59,10 @@ h1, h2, h3, p { margin: 0; }
   max-width: 440px;
   height: 100vh;
   height: 100dvh;
-  height: 100svh;
   margin: 0 auto;
   background: var(--color-white);
   overflow: hidden;
   box-shadow: 0 0 60px rgba(0,0,0,0.25);
-}
-
-/* Installed to the Home Screen there is no browser toolbar to shrink for, and
-   svh stops short of the screen bottom — leaving a dead strip below the app
-   that the floating tab bar then appeared to hover above. Fill the screen so
-   the bar sits where it should; the bar's own
-   `bottom: max(--space-4, env(safe-area-inset-bottom))` still clears the home
-   indicator. Safari keeps svh, so the toolbar never covers bottom controls. */
-@media (display-mode: standalone) {
-  #app { height: 100dvh; }
 }
 
 /* ============================================================
