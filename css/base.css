@@ -66,6 +66,16 @@ h1, h2, h3, p { margin: 0; }
   box-shadow: 0 0 60px rgba(0,0,0,0.25);
 }
 
+/* Installed to the Home Screen there is no browser toolbar to shrink for, and
+   svh stops short of the screen bottom — leaving a dead strip below the app
+   that the floating tab bar then appeared to hover above. Fill the screen so
+   the bar sits where it should; the bar's own
+   `bottom: max(--space-4, env(safe-area-inset-bottom))` still clears the home
+   indicator. Safari keeps svh, so the toolbar never covers bottom controls. */
+@media (display-mode: standalone) {
+  #app { height: 100dvh; }
+}
+
 /* ============================================================
    Viewport adaptation
    Everything below keys off the VIEWPORT (width, height, orientation) rather
