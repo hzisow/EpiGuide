@@ -23,8 +23,9 @@ import { state, navigate, logIncidentEventOnce } from '../app.js';
 import { icons } from '../icons.js';
 import { scoreWithSafetyOverride } from '../model.js';
 import { isDebugMode, URGENCY_COPY, debugPanelHTML } from '../modelUi.js';
+import { applyAgeBand } from '../data/checklistItems.js';
 import { createFaceVision, coverTransform, FACE_OVAL, OUTER_LIPS, LEFT_EYE, RIGHT_EYE } from '../faceVision.js';
-import { ensureHivesModel, classifySkin } from '../hivesModel.js';
+import { ensureHivesModel, classifySkin, HIVES_CUE_THRESHOLD } from '../hivesModel.js';
 
 let root, video, canvas, ctx, badgesEl, sheetEl, permEl, toolbarEl, flipEl, recognizeEl;
 let built = false;
@@ -47,7 +48,7 @@ let faceMeshSettled = false;
 let cropCanvas = null;         // reused 224² canvas for the CNN
 let readyFrames = 0;           // frames counted after baseline warmup
 let swellVotes = 0, flushVotes = 0;
-let reactionSum = 0, reactionN = 0;
+let reactionSum = 0, reactionN = 0, hivesSum = 0;
 let lastSkinTop = null, lastSkinProb = 0;
 let cnnFrame = 0;
 
@@ -67,7 +68,7 @@ export function initRecognize() {
   lastFaceBox = null;
   faceVision = createFaceVision();
   readyFrames = swellVotes = flushVotes = 0;
-  reactionSum = reactionN = cnnFrame = 0;
+  reactionSum = reactionN = cnnFrame = hivesSum = 0;
   lastSkinTop = null; lastSkinProb = 0;
   // A new visit re-runs both loaders, so nothing is "loaded" until it says so.
   hivesReady = faceMeshReady = false;
@@ -220,7 +221,7 @@ async function flipCamera() {
   lastFaceBox = null;
   faceVision = createFaceVision();
   readyFrames = swellVotes = flushVotes = 0;
-  reactionSum = reactionN = cnnFrame = 0;
+  reactionSum = reactionN = cnnFrame = hivesSum = 0;
   lastSkinTop = null; lastSkinProb = 0;
 
   // If a result had already been revealed, don't leave a stale read on
@@ -420,7 +421,7 @@ function analyzeFrame(landmarks) {
       try {
         const r = classifySkin(crop);
         if (r) {
-          reactionSum += r.reaction; reactionN += 1;
+          hivesSum += r.hives; reactionSum += r.reaction; reactionN += 1;
           lastSkinTop = r.top; lastSkinProb = r.topProb;
         }
       } catch (_) { /* transient backend hiccup */ }
@@ -535,14 +536,23 @@ const URGENCY_PILL = {
 function summarizeVision() {
   const frames = Math.max(1, readyFrames);
   const avgReaction = reactionN ? reactionSum / reactionN : null;
+  const avgHives = reactionN ? hivesSum / reactionN : null;
   const swelling = swellVotes / frames >= 0.35;
   const flushing = flushVotes / frames >= 0.35;
-  const skinReaction = avgReaction != null && avgReaction >= 0.6;
+  // Driven by P(hives), NOT by 1 - P(normal_skin). Auditing the shipped weights
+  // against 359 real SCIN images showed the old cue exceeded its 0.6 threshold
+  // on 98.6% of everything, including skin dermatologists graded as showing no
+  // pathology. It was a constant yes wearing a probability. P(hives) at 0.7 had
+  // precision 1.00 on the same images. See train/vision/README.md.
+  const skinReaction = avgHives != null && avgHives >= HIVES_CUE_THRESHOLD;
   const modelState = {};
+  // Age carries real weight in the model and belongs to the patient, not to how
+  // the signs were spotted, so it applies on the camera path as well.
+  applyAgeBand(modelState, state.checklist.ageBand);
   if (skinReaction) modelState.hives = 1;            // trained CNN: skin reaction
   if (flushing) modelState.flushing = 1;             // malar redness (landmarks)
   if (swelling) modelState.lip_face_swelling = 1;    // lip/eyelid geometry
-  return { modelState, avgReaction, swelling, flushing, skinReaction,
+  return { modelState, avgReaction, avgHives, swelling, flushing, skinReaction,
            any: skinReaction || flushing || swelling };
 }
 
@@ -663,7 +673,7 @@ function visionDebugHTML(v) {
     <div class="debug-panel" aria-hidden="true">
       <div class="debug-panel__head">
         <span class="debug-panel__tag">VISION</span>
-        <span class="debug-panel__prob">skin reaction ${pct(v.avgReaction)}</span>
+        <span class="debug-panel__prob">P(hives) ${pct(v.avgHives)} \u00b7 cue \u2265${HIVES_CUE_THRESHOLD}</span>
       </div>
       <div class="debug-panel__bars">
         <div class="debug-bar"><div class="debug-bar__label">CNN top class</div>

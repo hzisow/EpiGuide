@@ -1,0 +1,108 @@
+{
+  "_README": [
+    "SECONDARY ANALYSIS ONLY. Nothing in this file affects the headline sensitivity",
+    "or specificity numbers, and it must never be used to soften them.",
+    "",
+    "Specificity counts every non-anaphylaxis case the app escalates as a false",
+    "alarm. That is the correct primary metric and we report it unchanged. But it",
+    "conflates two very different mistakes. Telling someone with cold urticaria to",
+    "call 911 is a genuine false alarm. Telling someone with ACE-inhibitor",
+    "angioedema of the tongue to call 911 is correct advice about the wrong",
+    "diagnosis, and a bystander app that stayed quiet there would be failing.",
+    "",
+    "So this file tags each mimic with whether emergency care was warranted anyway.",
+    "",
+    "PROVENANCE: this is OUR clinical judgment, not a finding from the source paper",
+    "and not a claim to clinical authority. We are not clinicians. Every judgment",
+    "below states its reasoning so a clinician reading it can disagree specifically.",
+    "Where a case was arguable we tagged it `false_alarm`, the answer that makes our",
+    "own numbers look worse."
+  ],
+  "judgments": {
+    "mimic_scombroid_30f": {
+      "emergency_care_warranted": true,
+      "epinephrine_indicated": false,
+      "reasoning": "Scombroid is a histamine toxicity that is clinically indistinguishable from anaphylaxis at the bedside and is treated as anaphylaxis until excluded. Severe cases involve bronchospasm and hypotension. Calling for help is right; the diagnosis is only separable afterwards."
+    },
+    "mimic_acei_lisinopril_80sf": {
+      "emergency_care_warranted": true,
+      "epinephrine_indicated": false,
+      "reasoning": "Bradykinin-mediated angioedema involving the tongue and airway is a recognised cause of death by asphyxiation and needs immediate airway assessment. Epinephrine is largely ineffective for it, but that is an argument about treatment, not about whether to call for help."
+    },
+    "mimic_hae_abdominal_80f": {
+      "emergency_care_warranted": true,
+      "epinephrine_indicated": false,
+      "reasoning": "Hereditary angioedema attack severe enough to cause bowel obstruction. Needs urgent care and specific therapy."
+    },
+    "mimic_factitious_14f": {
+      "emergency_care_warranted": true,
+      "epinephrine_indicated": false,
+      "reasoning": "Presented with stridor. Stridor is an airway sign that warrants immediate assessment regardless of eventual cause, and the cause here was only established after extensive workup. A bystander cannot make that call."
+    },
+    "mimic_vanco_flushing_68m": {
+      "emergency_care_warranted": true,
+      "epinephrine_indicated": false,
+      "reasoning": "Infusion reaction requiring the infusion to be stopped and the patient assessed. Occurred in hospital, so the escalation is less consequential, but medical attention was needed."
+    },
+    "mimic_systemic_mastocytosis_58m": {
+      "emergency_care_warranted": true,
+      "epinephrine_indicated": true,
+      "reasoning": "Recurrent flushing with hypotension and syncope from mast cell activation. Epinephrine is genuinely indicated for severe mast cell activation events, and these patients are prescribed autoinjectors. This one is arguably not an error at all."
+    },
+    "mimic_vasovagal_venipuncture_29m": {
+      "emergency_care_warranted": true,
+      "epinephrine_indicated": false,
+      "reasoning": "Syncope with documented sinus arrest. The arrest was transient and vasovagal syncope itself is benign, but a collapse with loss of consciousness of unknown cause warrants assessment. Epinephrine is not indicated and would be the wrong action."
+    },
+    "mimic_syncope_covidvax_21f": {
+      "emergency_care_warranted": true,
+      "epinephrine_indicated": false,
+      "reasoning": "As above: neurally mediated syncope with sinus arrest after vaccination. Distinguishing this from post-vaccination anaphylaxis at the bedside is precisely the hard case, and observation is standard."
+    },
+    "mimic_cold_urticaria_9m": {
+      "emergency_care_warranted": false,
+      "epinephrine_indicated": false,
+      "reasoning": "Isolated cutaneous reaction to cold with no systemic involvement. This is a real false alarm. A child with hives after swimming does not need an ambulance."
+    },
+    "mimic_cold_urticaria_19f": {
+      "emergency_care_warranted": false,
+      "epinephrine_indicated": false,
+      "reasoning": "Inducible urticaria confirmed by threshold testing, no systemic features. Real false alarm."
+    },
+    "mimic_covid_urticaria_39f": {
+      "emergency_care_warranted": false,
+      "epinephrine_indicated": false,
+      "reasoning": "Acute urticaria as a COVID presentation, cutaneous only. Real false alarm."
+    },
+    "mimic_contact_dermatitis_45f": {
+      "emergency_care_warranted": false,
+      "epinephrine_indicated": false,
+      "reasoning": "Allergic contact dermatitis. Not urgent."
+    },
+    "mimic_dermatographism_31m": {
+      "emergency_care_warranted": false,
+      "epinephrine_indicated": false,
+      "reasoning": "Inducible urticaria after a booster, cutaneous only. Real false alarm."
+    },
+    "mimic_prawn_label_22m": {
+      "emergency_care_warranted": false,
+      "epinephrine_indicated": false,
+      "reasoning": "Mild oral symptoms on supervised challenge, allergy label subsequently removed. Real false alarm."
+    },
+    "mimic_pvfd_21f": {
+      "emergency_care_warranted": false,
+      "epinephrine_indicated": false,
+      "reasoning": "Paradoxical vocal fold dysfunction. Frightening and frequently misdiagnosed as anaphylaxis, but not itself an emergency. Real false alarm, and a clinically important one: these patients are often given epinephrine repeatedly for years."
+    },
+    "mimic_asthma_exac_57f": {
+      "emergency_care_warranted": true,
+      "epinephrine_indicated": false,
+      "reasoning": "Acute asthma exacerbation complicated by pneumomediastinum. Needs emergency care; epinephrine is not the right treatment but calling for help is right."
+    },
+    "mimic_acei_perindopril_65m": {
+      "emergency_care_warranted": true,
+      "epinephrine_indicated": false,
+      "reasoning": "ACE-inhibitor angioedema of lips and tongue. Airway risk; see the lisinopril case."
+    }
+  }
+}

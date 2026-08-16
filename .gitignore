@@ -2,3 +2,14 @@ node_modules/
 www/
 .DS_Store
 *.log
+
+# Scratch: the device bridge cannot delete files, so removals land here instead.
+_to_delete/
+
+# Generated training artifacts. The evidence table, the fitting code and the
+# validation report are all committed; the raw synthetic cohort is not, because
+# it is reproducible from a seed and is large.
+train/out/cohort.npz
+train/vision/data/
+train/vision/out/
+train/vision/node_modules/

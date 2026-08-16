@@ -1,0 +1,107 @@
+[
+  {
+    "symptom": "hives",
+    "base_rate": 0.553,
+    "expected_after_modifiers": 0.5371,
+    "generated": 0.5466,
+    "abs_error": 0.0094
+  },
+  {
+    "symptom": "lip_face_swelling",
+    "base_rate": 0.554,
+    "expected_after_modifiers": 0.4854,
+    "generated": 0.4924,
+    "abs_error": 0.007
+  },
+  {
+    "symptom": "flushing",
+    "base_rate": 0.227,
+    "expected_after_modifiers": 0.2327,
+    "generated": 0.2373,
+    "abs_error": 0.0046
+  },
+  {
+    "symptom": "itching",
+    "base_rate": 0.618,
+    "expected_after_modifiers": 0.618,
+    "generated": 0.638,
+    "abs_error": 0.02
+  },
+  {
+    "symptom": "trouble_breathing",
+    "base_rate": 0.55,
+    "expected_after_modifiers": 0.4933,
+    "generated": 0.5027,
+    "abs_error": 0.0093
+  },
+  {
+    "symptom": "wheezing",
+    "base_rate": 0.179,
+    "expected_after_modifiers": 0.179,
+    "generated": 0.187,
+    "abs_error": 0.008
+  },
+  {
+    "symptom": "throat_tightness",
+    "base_rate": 0.544,
+    "expected_after_modifiers": 0.5715,
+    "generated": 0.5803,
+    "abs_error": 0.0088
+  },
+  {
+    "symptom": "cough",
+    "base_rate": 0.15,
+    "expected_after_modifiers": 0.15,
+    "generated": 0.149,
+    "abs_error": 0.001
+  },
+  {
+    "symptom": "stridor",
+    "base_rate": 0.058,
+    "expected_after_modifiers": 0.058,
+    "generated": 0.0588,
+    "abs_error": 0.0008
+  },
+  {
+    "symptom": "vomiting",
+    "base_rate": 0.15,
+    "expected_after_modifiers": 0.2198,
+    "generated": 0.2244,
+    "abs_error": 0.0046
+  },
+  {
+    "symptom": "abdominal_pain",
+    "base_rate": 0.13,
+    "expected_after_modifiers": 0.096,
+    "generated": 0.097,
+    "abs_error": 0.001
+  },
+  {
+    "symptom": "diarrhea",
+    "base_rate": 0.039,
+    "expected_after_modifiers": 0.0299,
+    "generated": 0.0297,
+    "abs_error": 0.0001
+  },
+  {
+    "symptom": "dizziness",
+    "base_rate": 0.35,
+    "expected_after_modifiers": 0.4813,
+    "generated": 0.4908,
+    "abs_error": 0.0095
+  },
+  {
+    "symptom": "collapse",
+    "base_rate": 0.103,
+    "expected_after_modifiers": 0.103,
+    "generated": 0.1052,
+    "abs_error": 0.0022
+  },
+  {
+    "symptom": "loss_of_consciousness",
+    "base_rate": 0.2,
+    "expected_after_modifiers": 0.2313,
+    "generated": 0.2324,
+    "abs_error": 0.0011
+  }
+]

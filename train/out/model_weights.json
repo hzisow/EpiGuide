@@ -1,0 +1,187 @@
+{
+  "generated_by": "train/src/train_symptom_model.py",
+  "git_rev": "944f0e8",
+  "seed": 20240816,
+  "regularisation": {
+    "penalty": "l2",
+    "C": 1.0
+  },
+  "features": [
+    "hives",
+    "lip_face_swelling",
+    "flushing",
+    "itching",
+    "trouble_breathing",
+    "wheezing",
+    "throat_tightness",
+    "cough",
+    "stridor",
+    "vomiting",
+    "abdominal_pain",
+    "diarrhea",
+    "dizziness",
+    "collapse",
+    "loss_of_consciousness",
+    "known_exposure",
+    "rapid_onset",
+    "trigger_food",
+    "trigger_venom",
+    "trigger_drug",
+    "age_child",
+    "age_elderly"
+  ],
+  "intercept": -6.9878,
+  "weights": {
+    "hives": 0.6396,
+    "lip_face_swelling": 1.2574,
+    "flushing": 0.3145,
+    "itching": 1.0554,
+    "trouble_breathing": 0.6016,
+    "wheezing": 0.7553,
+    "throat_tightness": 2.2259,
+    "cough": 0.0152,
+    "stridor": 0.9821,
+    "vomiting": 1.2467,
+    "abdominal_pain": -0.4992,
+    "diarrhea": -0.6915,
+    "dizziness": 1.6671,
+    "collapse": -0.3468,
+    "loss_of_consciousness": 1.3822,
+    "known_exposure": 2.9577,
+    "rapid_onset": 1.4994,
+    "trigger_food": -0.0246,
+    "trigger_venom": 1.41,
+    "trigger_drug": -0.7396,
+    "age_child": 0.2669,
+    "age_elderly": -0.5689
+  },
+  "thresholds": {
+    "_method": "Selected on the synthetic holdout only, never on the real validation cases, so that external validation stays external.",
+    "target_sensitivity_for_possible": 0.95,
+    "target_specificity_for_likely": 0.9,
+    "possible": {
+      "threshold": 0.1239,
+      "synthetic_sensitivity": 0.95,
+      "synthetic_specificity": 0.7757
+    },
+    "likely": {
+      "threshold": 0.326,
+      "synthetic_sensitivity": 0.861,
+      "synthetic_specificity": 0.9
+    }
+  },
+  "calibration": {
+    "brier_score": 0.0734,
+    "expected_calibration_error": 0.0055,
+    "bins": [
+      {
+        "range": [
+          0.0,
+          0.1
+        ],
+        "n": 5304,
+        "mean_predicted": 0.0246,
+        "observed_rate": 0.0236
+      },
+      {
+        "range": [
+          0.1,
+          0.2
+        ],
+        "n": 796,
+        "mean_predicted": 0.1434,
+        "observed_rate": 0.1595
+      },
+      {
+        "range": [
+          0.2,
+          0.3
+        ],
+        "n": 537,
+        "mean_predicted": 0.2547,
+        "observed_rate": 0.2607
+      },
+      {
+        "range": [
+          0.3,
+          0.4
+        ],
+        "n": 339,
+        "mean_predicted": 0.351,
+        "observed_rate": 0.3451
+      },
+      {
+        "range": [
+          0.4,
+          0.5
+        ],
+        "n": 309,
+        "mean_predicted": 0.4444,
+        "observed_rate": 0.4304
+      },
+      {
+        "range": [
+          0.5,
+          0.6
+        ],
+        "n": 254,
+        "mean_predicted": 0.5522,
+        "observed_rate": 0.5591
+      },
+      {
+        "range": [
+          0.6,
+          0.7
+        ],
+        "n": 269,
+        "mean_predicted": 0.6528,
+        "observed_rate": 0.6803
+      },
+      {
+        "range": [
+          0.7,
+          0.8
+        ],
+        "n": 280,
+        "mean_predicted": 0.7537,
+        "observed_rate": 0.7643
+      },
+      {
+        "range": [
+          0.8,
+          0.9
+        ],
+        "n": 399,
+        "mean_predicted": 0.8558,
+        "observed_rate": 0.8496
+      },
+      {
+        "range": [
+          0.9,
+          1.0
+        ],
+        "n": 1513,
+        "mean_predicted": 0.9696,
+        "observed_rate": 0.9782
+      }
+    ],
+    "_note": "Calibrated to the synthetic distribution only; see the docstring."
+  },
+  "internal_metrics": {
+    "_WARNING": "These numbers are internal consistency checks on synthetic data, NOT evidence the model works on patients. Fitting and testing on output from the same generator measures only whether that generator is learnable. The real metrics are in evaluate.py / validation_report.md.",
+    "n_total": 40000,
+    "n_train": 30000,
+    "n_test": 10000,
+    "synthetic_holdout_accuracy": 0.9001,
+    "synthetic_holdout_auc": 0.9548,
+    "synthetic_holdout_average_precision": 0.9174,
+    "synthetic_cv_auc_mean": 0.9515,
+    "synthetic_cv_auc_std": 0.0013
+  },
+  "keras_crosscheck": {
+    "result": null,
+    "note": null
+  },
+  "provenance": "Fitted on a synthetic cohort drawn from data/symptom_frequencies.json, which cites a published source for every rate it uses and flags every value it had to assume. No patient data was used at any stage. External validation against real published cases: see out/validation_report.md.",
+  "_git_rev_note": "Revision of the EpiGuide repo this artifact was generated against. Set explicitly because the pipeline was run outside the repo working tree."
+}

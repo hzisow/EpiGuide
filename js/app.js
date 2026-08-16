@@ -27,7 +27,7 @@ export const state = {
   // to tell real responders "Likely anaphylaxis". Keep them apart.
   recognize: { result: null, revealed: false },
   guide: { currentStep: 1, device: null, deviceLocked: false }, // device: which injector's steps
-  checklist: { checkedItemIds: [] },
+  checklist: { checkedItemIds: [], ageBand: 'adult' },
   dispatch: {
     epinephrineGivenAt: null, // Date, set when Guide step 6 completes
     // Did a 911 call ACTUALLY happen? See CALL_911_* below. Tapping the tel:911
@@ -113,6 +113,7 @@ export function resetIncident() {
   state.guide.device = null;
   state.guide.deviceLocked = false;
   state.checklist.checkedItemIds = [];
+  state.checklist.ageBand = 'adult';
   state.dispatch.epinephrineGivenAt = null;
   state.dispatch.call911 = CALL_911_NONE;
   state.dispatch.call911ConfirmedAt = null;

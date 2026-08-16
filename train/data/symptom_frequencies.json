@@ -1,0 +1,333 @@
+{
+  "_README": [
+    "Evidence table for the EpiGuide symptom model. Every probability here was read",
+    "from a published source, and every row names that source. Rows whose value is",
+    "null were NOT FOUND in the literature and are handled explicitly by the",
+    "generator (see `assumptions` at the bottom) rather than being quietly guessed.",
+    "",
+    "Provenance codes used in `basis`:",
+    "  table      value appears in a published table or the paper's body text",
+    "  fig-read   value was digitised from a published chart; approximate",
+    "  proxy      value borrowed from a related-but-not-identical measure (explained)",
+    "  assumed    NOT FOUND in the literature; set by us, with a stated rationale",
+    "",
+    "Anything marked `assumed` is a modelling choice, not a finding. The sensitivity",
+    "analysis in evaluate.py re-fits the model with every assumed value perturbed so",
+    "you can see how much each one actually matters."
+  ],
+
+  "positive_class": {
+    "_description": "P(symptom | anaphylaxis). Primary source is an all-severity emergency-department registry, because the European Anaphylaxis Registry deliberately oversamples severe tertiary-referral cases and would inflate respiratory and cardiovascular rates.",
+    "_primary_source": {
+      "key": "khalaf2025",
+      "citation": "Khalaf R, Prosty C, McCusker C, et al. Symptomatology and Management of Adult Anaphylaxis according to Trigger: A Cross-Sectional Study. Int Arch Allergy Immunol 2025;186(5):454-464. DOI 10.1159/000542115",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12048103/",
+      "n": 1135,
+      "population": "Adults presenting to Canadian emergency departments, Cross-Canada Anaphylaxis Registry"
+    },
+    "symptoms": {
+      "hives":                 { "p": 0.553, "basis": "table",  "source": "khalaf2025", "note": "reported as urticaria, 633/1135" },
+      "lip_face_swelling":     { "p": 0.554, "basis": "table",  "source": "khalaf2025", "note": "reported as angioedema, 629/1135" },
+      "flushing":              { "p": 0.227, "basis": "table",  "source": "khalaf2025", "note": "258/1135" },
+      "itching":               { "p": 0.618, "basis": "table",  "source": "khalaf2025", "note": "reported as pruritus, 701/1135" },
+      "trouble_breathing":     { "p": 0.550, "basis": "table",  "source": "aurich2019", "note": "dyspnoea in adults 18-64; Khalaf does not record dyspnoea separately. EAR-derived, so severity-biased upward." },
+      "wheezing":              { "p": 0.179, "basis": "table",  "source": "khalaf2025", "note": "203/1135" },
+      "throat_tightness":      { "p": 0.544, "basis": "table",  "source": "khalaf2025", "note": "617/1135. Note the EAR severe-only subset reports only 14.6%, a very wide disagreement driven by population and by whether subjective symptoms are recorded." },
+      "cough":                 { "p": null,  "basis": "assumed", "source": null, "assumed_p": 0.15, "note": "NOT FOUND as a discrete percentage in any adult registry. Grabenhenrich 2016 states cough is prevalent in the first decade of life but gives no number. 0.15 is our assumption, chosen below wheezing since cough is the less specific sign. Not UI-reachable in the current app." },
+      "stridor":               { "p": 0.058, "basis": "table",  "source": "khalaf2025", "note": "66/1135" },
+      "vomiting":              { "p": 0.150, "basis": "proxy",  "source": "khalaf2025", "note": "Khalaf reports 'multiple vomiting' 5.0% and 'GI any' 22.5%. Single-episode vomiting is not separately reported, so we place vomiting between the two. Aurich fig-read gives ~11-18% across the adult age range, which agrees." },
+      "abdominal_pain":        { "p": 0.130, "basis": "fig-read", "source": "aurich2019", "note": "digitised from Aurich 2019 Figure 3, ~13% at age 20 falling to ~5% at 80. Approximate." },
+      "diarrhea":              { "p": 0.039, "basis": "table",  "source": "khalaf2025", "note": "44/1135" },
+      "dizziness":             { "p": 0.350, "basis": "fig-read", "source": "aurich2019", "note": "digitised from Aurich 2019 Figure 3 (~35% at 20, ~30% at 80). The EAR severe-only subset reports 38.7%. Approximate." },
+      "collapse":              { "p": 0.103, "basis": "table",  "source": "khalaf2025", "note": "reported as hypotension, 117/1135. The app's checkbox says 'sudden collapse', which a bystander will read more broadly than measured hypotension; this is a known wording mismatch." },
+      "loss_of_consciousness": { "p": 0.200, "basis": "table",  "source": "aurich2019", "note": "adults 18-64. Elderly 33% (p<0.001). EAR-derived, severity-biased upward." }
+    },
+    "age_modifiers": {
+      "_description": "Multiplicative adjustments applied to the base rates above. Only modifiers with a citable direction AND magnitude are included; where a source gives direction only, no modifier is applied.",
+      "age_child": {
+        "hives":             { "factor": 1.12, "source": "pyrpyris2022", "note": "urticaria 62.0% of children with skin involvement vs 55.3% adult base" },
+        "lip_face_swelling": { "factor": 0.69, "source": "pyrpyris2022", "note": "angioedema 38.4% in children" },
+        "vomiting":          { "factor": 2.60, "source": "francuzik2021", "note": "fig-read: in patients under 22, vomiting ~39% in non-venom anaphylaxis" },
+        "collapse":          { "factor": 0.55, "source": "aytekin2024", "note": "cardiovascular involvement 13.8% in children vs 72-75% in adults; applied conservatively rather than at full ratio because the child cohorts are single-centre" },
+        "loss_of_consciousness": { "factor": 0.55, "source": "aytekin2024", "note": "as above" }
+      },
+      "age_elderly": {
+        "hives":                 { "factor": 0.56, "source": "hanschmann2023", "note": "urticaria 31.17% in seniors vs 62.75% in children, drug-induced cohort" },
+        "lip_face_swelling":     { "factor": 0.61, "source": "hanschmann2023", "note": "angioedema 33.77% in seniors" },
+        "trouble_breathing":     { "factor": 0.93, "source": "aurich2019", "note": "dyspnoea 51% elderly vs 55% adults" },
+        "loss_of_consciousness": { "factor": 1.65, "source": "aurich2019", "note": "33% elderly vs 20% adults, p<0.001" }
+      }
+    },
+    "trigger_modifiers": {
+      "_description": "Applied on top of the base rates. Venom modifiers are the best-evidenced; food and drug modifiers use only text-stated findings.",
+      "trigger_venom": {
+        "dizziness":             { "factor": 1.96, "source": "francuzik2021", "note": "fig-read: ~47% venom vs ~24% non-venom" },
+        "collapse":              { "factor": 1.19, "source": "francuzik2021", "note": "fig-read: hypotension ~43% vs ~36%" },
+        "loss_of_consciousness": { "factor": 1.58, "source": "francuzik2021", "note": "fig-read: unconsciousness ~30% vs ~19%" },
+        "trouble_breathing":     { "factor": 0.75, "source": "francuzik2021", "note": "text-stated: significantly less respiratory distress in venom-induced" },
+        "diarrhea":              { "factor": 0.40, "source": "francuzik2021", "note": "fig-read: ~4% vs ~10%" },
+        "abdominal_pain":        { "factor": 0.33, "source": "francuzik2021", "note": "fig-read: ~5% vs ~15%" }
+      },
+      "trigger_food": {
+        "throat_tightness": { "factor": 1.14, "source": "khalaf2025", "note": "61.8% food vs 54.4% overall" },
+        "hives":            { "factor": 0.90, "source": "khalaf2025", "note": "49.8% food vs 55.3% overall" },
+        "collapse":         { "factor": 0.69, "source": "khalaf2025", "note": "hypotension 7.1% food vs 10.3% overall" }
+      },
+      "trigger_drug": {
+        "hives":    { "factor": 1.07, "source": "khalaf2025", "note": "59.4% drug vs 55.3% overall" },
+        "collapse": { "factor": 1.83, "source": "khalaf2025", "note": "hypotension 18.8% drug vs 10.3% overall" },
+        "flushing": { "factor": 1.14, "source": "khalaf2025", "note": "25.8% drug vs 22.7% overall" }
+      }
+    },
+    "context_features": {
+      "known_exposure": { "p": 0.968, "basis": "proxy", "source": "worm2025", "note": "1 minus the registry's 'unknown trigger' rate (3.1% children / 2.8% adults). This is what the registry knows after workup, not what a bystander knows in the moment, so it is an upper bound." },
+      "rapid_onset":    { "p": 0.850, "basis": "assumed", "source": null, "assumed_p": 0.85, "note": "NOT FOUND as a percentage. All criteria sets define anaphylaxis onset as minutes to several hours, and registry cases are NIAID/FAAN-positive by construction, so most positives are rapid by definition. 0.85 rather than 1.0 leaves room for delayed presentations such as alpha-gal." }
+    },
+    "trigger_distribution": {
+      "_source": "worm2025",
+      "_citation": "Worm M, Dolle-Bierke S, Faust L, Hofer V. Recent findings from the anaphylaxis registry. Allergol Select 2025;9:21-27",
+      "_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11915352/",
+      "child":  { "trigger_food": 0.70, "trigger_venom": 0.16, "trigger_drug": 0.052, "unknown": 0.088 },
+      "adult":  { "trigger_food": 0.21, "trigger_venom": 0.50, "trigger_drug": 0.23, "unknown": 0.060 },
+      "_note": "Adult venom dominance is a European referral-centre artefact: allergy centres see venom-immunotherapy candidates. A US bystander app will see relatively more food. This is listed in assumptions and included in the sensitivity analysis."
+    },
+    "age_distribution": {
+      "_source": "worm2025",
+      "child": 0.288,
+      "elderly": 0.093,
+      "adult": 0.619,
+      "_note": "children 4,897 of 16,988. Elderly share from Aurich 2019 (1,123 of 6,891 adults) rescaled onto the adult share."
+    },
+    "organ_system_structure": {
+      "_description": "Symptoms are not independent: they cluster by organ system. The generator samples system involvement first, then symptoms within an involved system, so that generated cases show the multi-system pattern the clinical criteria key on. Independent Bernoulli sampling would produce implausible vectors such as stridor with no other respiratory sign.",
+      "systems": {
+        "skin":           { "p": 0.841, "source": "worm2014_allergy", "members": ["hives", "lip_face_swelling", "flushing", "itching"] },
+        "respiratory":    { "p": 0.680, "source": "worm2012",         "members": ["trouble_breathing", "wheezing", "throat_tightness", "cough", "stridor"] },
+        "cardiovascular": { "p": 0.720, "source": "worm2012",         "members": ["dizziness", "collapse", "loss_of_consciousness"] },
+        "gastrointestinal": { "p": 0.425, "source": "hanschmann2023", "members": ["vomiting", "abdominal_pain", "diarrhea"], "note": "42.52% for non-drug triggers (4,106/9,657)" }
+      },
+      "_no_skin_check": {
+        "adult": 0.15,
+        "child": 0.061,
+        "source": "worm2025",
+        "note": "15% of adult and 6.1% of paediatric registry anaphylaxis had no skin involvement at all. The generator is checked against this, because a model that cannot fire without skin signs is dangerous."
+      }
+    }
+  },
+
+  "negative_class": {
+    "_description": "P(symptom | condition) for conditions a frightened bystander could plausibly mistake for anaphylaxis. This is the weakest part of the evidence base and we say so loudly: no published study reports the same symptom list across anaphylaxis and its mimics, so these profiles are assembled from differently-designed studies and, where nothing exists, from stated assumptions.",
+    "_mixture_weights_note": "The weights below are the assumed prevalence of each condition among non-anaphylaxis presentations that would reach an app like this. No source exists for this distribution. It is an assumption, and evaluate.py re-runs the fit under alternative mixtures.",
+    "conditions": {
+      "acute_urticaria": {
+        "weight": 0.28,
+        "source": "kulthanan2008",
+        "citation": "Kulthanan K, Chiawsirikajorn Y, Jiamton S. Acute urticaria: etiologies, clinical course and quality of life. Asian Pac J Allergy Immunol 2008;26(1):1-9",
+        "url": "https://www.apjai-journal.org/wp-content/uploads/2017/12/1AcuteUrticariaVol26No1March2008P1.pdf",
+        "n": 79,
+        "symptoms": {
+          "hives":                 { "p": 1.00,  "basis": "table",   "note": "definitional" },
+          "itching":               { "p": 0.95,  "basis": "table",   "note": "universal in cohort, mean severity 7.4/10" },
+          "lip_face_swelling":     { "p": 0.165, "basis": "table",   "note": "co-existing angioedema 13/79" },
+          "trouble_breathing":     { "p": 0.203, "basis": "table",   "note": "dyspnoea 16/79. Note this is NOT a clean discriminator." },
+          "abdominal_pain":        { "p": 0.063, "basis": "table",   "note": "5/79" },
+          "collapse":              { "p": 0.013, "basis": "table",   "note": "fainting 1/79" },
+          "flushing":              { "p": 0.20,  "basis": "assumed", "note": "NOT REPORTED in Kulthanan. Erythema commonly accompanies weals." },
+          "wheezing":              { "p": 0.05,  "basis": "assumed", "note": "NOT REPORTED" },
+          "throat_tightness":      { "p": 0.05,  "basis": "assumed", "note": "NOT REPORTED" },
+          "cough":                 { "p": 0.05,  "basis": "assumed", "note": "NOT REPORTED" },
+          "stridor":               { "p": 0.00,  "basis": "assumed", "note": "NOT REPORTED; stridor in acute urticaria alone would reclassify the case" },
+          "vomiting":              { "p": 0.03,  "basis": "assumed", "note": "NOT REPORTED" },
+          "diarrhea":              { "p": 0.03,  "basis": "assumed", "note": "NOT REPORTED" },
+          "dizziness":             { "p": 0.05,  "basis": "assumed", "note": "NOT REPORTED separately from fainting" },
+          "loss_of_consciousness": { "p": 0.00,  "basis": "assumed", "note": "NOT REPORTED" }
+        },
+        "context": { "known_exposure": 0.40, "rapid_onset": 0.55, "trigger_food": 0.15, "trigger_venom": 0.05, "trigger_drug": 0.20 }
+      },
+      "isolated_angioedema": {
+        "weight": 0.16,
+        "source": "assumed",
+        "citation": "NOT FOUND. Hereditary-angioedema literature reports attack site distributions, not frequencies over this symptom list. Profile below is assumed from the clinical definition, informed by the four ACE-inhibitor and hereditary angioedema cases in the real validation set.",
+        "symptoms": {
+          "lip_face_swelling":     { "p": 0.95, "basis": "assumed", "note": "definitional" },
+          "hives":                 { "p": 0.05, "basis": "assumed", "note": "bradykinin-mediated angioedema is characteristically NOT urticarial; this absence is the key discriminator and is why the model must not treat swelling alone as sufficient" },
+          "itching":               { "p": 0.10, "basis": "assumed" },
+          "flushing":              { "p": 0.05, "basis": "assumed" },
+          "throat_tightness":      { "p": 0.35, "basis": "assumed", "note": "laryngeal involvement is the feared complication" },
+          "trouble_breathing":     { "p": 0.25, "basis": "assumed" },
+          "stridor":               { "p": 0.08, "basis": "assumed" },
+          "wheezing":              { "p": 0.03, "basis": "assumed" },
+          "cough":                 { "p": 0.05, "basis": "assumed" },
+          "abdominal_pain":        { "p": 0.25, "basis": "assumed", "note": "abdominal attacks are a recognised hereditary-angioedema presentation" },
+          "vomiting":              { "p": 0.15, "basis": "assumed" },
+          "diarrhea":              { "p": 0.05, "basis": "assumed" },
+          "dizziness":             { "p": 0.05, "basis": "assumed" },
+          "collapse":              { "p": 0.02, "basis": "assumed" },
+          "loss_of_consciousness": { "p": 0.01, "basis": "assumed" }
+        },
+        "context": { "known_exposure": 0.30, "rapid_onset": 0.35, "trigger_food": 0.05, "trigger_venom": 0.02, "trigger_drug": 0.35 }
+      },
+      "vasovagal_syncope": {
+        "weight": 0.20,
+        "source": "babaei2025",
+        "citation": "Babaei M, Tajdini M, Bozorgi A, et al. Age and sex differences in vasovagal syncope. Eur Heart J Open 2025;5(3):oeaf061",
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12152479/",
+        "n": 1914,
+        "symptoms": {
+          "dizziness":             { "p": 0.55, "basis": "table",   "note": "light-headedness ~55%" },
+          "loss_of_consciousness": { "p": 0.90, "basis": "assumed", "note": "definitional for syncope; not stated as a percentage" },
+          "collapse":              { "p": 0.85, "basis": "assumed", "note": "definitional" },
+          "vomiting":              { "p": 0.10, "basis": "proxy",   "note": "nausea 35.6% on tilt-table testing; vomiting is rarer than nausea" },
+          "abdominal_pain":        { "p": 0.10, "basis": "proxy",   "note": "abdominal discomfort listed as a prodrome; exact percentage is in an unretrieved supplementary table" },
+          "flushing":              { "p": 0.15, "basis": "proxy",   "note": "heat sensation and flushing listed as prodromes; percentages NOT FOUND" },
+          "hives":                 { "p": 0.00, "basis": "assumed", "note": "absent by definition" },
+          "lip_face_swelling":     { "p": 0.00, "basis": "assumed", "note": "absent by definition" },
+          "itching":               { "p": 0.00, "basis": "assumed" },
+          "trouble_breathing":     { "p": 0.10, "basis": "assumed" },
+          "wheezing":              { "p": 0.00, "basis": "assumed" },
+          "throat_tightness":      { "p": 0.02, "basis": "assumed" },
+          "cough":                 { "p": 0.02, "basis": "assumed" },
+          "stridor":               { "p": 0.00, "basis": "assumed" },
+          "diarrhea":              { "p": 0.02, "basis": "assumed" }
+        },
+        "context": { "known_exposure": 0.10, "rapid_onset": 0.70, "trigger_food": 0.02, "trigger_venom": 0.01, "trigger_drug": 0.05 }
+      },
+      "panic_attack": {
+        "weight": 0.14,
+        "source": "tunnell2024",
+        "citation": "Tunnell NC, Corner SE, Roque AD, et al. Biobehavioral approach to distinguishing panic symptoms from medical illness. Front Psychiatry 2024;15:1296569",
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11109415/",
+        "quality": "LOW. Narrative review, no stated N, internally inconsistent on dizziness (16% in Table 1 vs 50-85% in body text). Treat every number here as low confidence.",
+        "symptoms": {
+          "trouble_breathing":     { "p": 0.87, "basis": "table",   "note": "shortness of breath, 87% of reported panic attacks" },
+          "dizziness":             { "p": 0.40, "basis": "assumed", "note": "source contradicts itself (16% vs 50-85%); we take a midpoint and flag it" },
+          "vomiting":              { "p": 0.08, "basis": "proxy",   "note": "nausea/abdominal distress up to 28%; vomiting is rarer" },
+          "abdominal_pain":        { "p": 0.28, "basis": "table",   "note": "nausea or abdominal distress, up to 28%" },
+          "throat_tightness":      { "p": 0.30, "basis": "assumed", "note": "choking sensation is a DSM panic criterion; percentage NOT FOUND" },
+          "flushing":              { "p": 0.25, "basis": "assumed", "note": "hot flushes are a DSM panic criterion; percentage NOT FOUND" },
+          "collapse":              { "p": 0.05, "basis": "assumed" },
+          "loss_of_consciousness": { "p": 0.02, "basis": "assumed", "note": "true syncope is rare in panic and argues against the diagnosis" },
+          "hives":                 { "p": 0.00, "basis": "assumed" },
+          "lip_face_swelling":     { "p": 0.00, "basis": "assumed" },
+          "itching":               { "p": 0.02, "basis": "assumed" },
+          "wheezing":              { "p": 0.02, "basis": "assumed" },
+          "cough":                 { "p": 0.05, "basis": "assumed" },
+          "stridor":               { "p": 0.00, "basis": "assumed" },
+          "diarrhea":              { "p": 0.05, "basis": "assumed" }
+        },
+        "context": { "known_exposure": 0.15, "rapid_onset": 0.80, "trigger_food": 0.05, "trigger_venom": 0.02, "trigger_drug": 0.05 }
+      },
+      "acute_gastroenteritis": {
+        "weight": 0.12,
+        "source": "assumed",
+        "citation": "NOT FOUND for this symptom list. Published gastroenteritis cohorts use vomiting and diarrhoea as inclusion criteria, so their frequencies are ~100% by construction and useless as base rates. Profile below is assumed.",
+        "symptoms": {
+          "vomiting":              { "p": 0.85, "basis": "assumed", "note": "near-definitional" },
+          "diarrhea":              { "p": 0.80, "basis": "assumed", "note": "near-definitional" },
+          "abdominal_pain":        { "p": 0.75, "basis": "assumed" },
+          "dizziness":             { "p": 0.25, "basis": "assumed", "note": "dehydration" },
+          "collapse":              { "p": 0.05, "basis": "assumed" },
+          "loss_of_consciousness": { "p": 0.01, "basis": "assumed" },
+          "hives":                 { "p": 0.00, "basis": "assumed" },
+          "lip_face_swelling":     { "p": 0.00, "basis": "assumed" },
+          "flushing":              { "p": 0.05, "basis": "assumed" },
+          "itching":               { "p": 0.00, "basis": "assumed" },
+          "trouble_breathing":     { "p": 0.03, "basis": "assumed" },
+          "wheezing":              { "p": 0.01, "basis": "assumed" },
+          "throat_tightness":      { "p": 0.01, "basis": "assumed" },
+          "cough":                 { "p": 0.05, "basis": "assumed" },
+          "stridor":               { "p": 0.00, "basis": "assumed" }
+        },
+        "context": { "known_exposure": 0.25, "rapid_onset": 0.20, "trigger_food": 0.30, "trigger_venom": 0.00, "trigger_drug": 0.02 }
+      },
+      "asthma_exacerbation": {
+        "weight": 0.10,
+        "source": "assumed",
+        "citation": "NOT FOUND for this symptom list. Wheeze, dyspnoea and cough are inclusion criteria in exacerbation cohorts (~100% by construction), and no study reports the frequency of urticaria, angioedema or hypotension in asthma exacerbation. Profile below is assumed.",
+        "symptoms": {
+          "trouble_breathing":     { "p": 0.95, "basis": "assumed", "note": "near-definitional" },
+          "wheezing":              { "p": 0.85, "basis": "assumed", "note": "near-definitional" },
+          "cough":                 { "p": 0.70, "basis": "assumed" },
+          "throat_tightness":      { "p": 0.20, "basis": "assumed", "note": "chest tightness is often reported by patients as throat tightness" },
+          "dizziness":             { "p": 0.10, "basis": "assumed" },
+          "stridor":               { "p": 0.03, "basis": "assumed", "note": "wheeze is expiratory, stridor inspiratory; conflation by a lay bystander is plausible and is exactly the failure mode this feature must survive" },
+          "collapse":              { "p": 0.02, "basis": "assumed" },
+          "loss_of_consciousness": { "p": 0.01, "basis": "assumed" },
+          "hives":                 { "p": 0.02, "basis": "assumed" },
+          "lip_face_swelling":     { "p": 0.01, "basis": "assumed" },
+          "flushing":              { "p": 0.05, "basis": "assumed" },
+          "itching":               { "p": 0.02, "basis": "assumed" },
+          "vomiting":              { "p": 0.05, "basis": "assumed" },
+          "abdominal_pain":        { "p": 0.03, "basis": "assumed" },
+          "diarrhea":              { "p": 0.01, "basis": "assumed" }
+        },
+        "context": { "known_exposure": 0.20, "rapid_onset": 0.45, "trigger_food": 0.02, "trigger_venom": 0.01, "trigger_drug": 0.03 }
+      },
+      "mild_allergic_reaction": {
+        "weight": 0.10,
+        "source": "assumed",
+        "citation": "NOT FOUND as an aggregate table. Oral-food-challenge literature grades reactions but no open-access study tabulates per-symptom frequency in the subset that failed to meet anaphylaxis criteria. This is the hardest and most important negative class, because it is the one where a false positive is least costly and a false negative most costly.",
+        "symptoms": {
+          "itching":               { "p": 0.70, "basis": "assumed", "note": "oral itching is the classic mild presentation" },
+          "hives":                 { "p": 0.45, "basis": "assumed", "note": "localised rather than generalised" },
+          "lip_face_swelling":     { "p": 0.30, "basis": "assumed", "note": "localised lip tingling and mild swelling" },
+          "flushing":              { "p": 0.20, "basis": "assumed" },
+          "abdominal_pain":        { "p": 0.15, "basis": "assumed" },
+          "vomiting":              { "p": 0.10, "basis": "assumed" },
+          "diarrhea":              { "p": 0.05, "basis": "assumed" },
+          "trouble_breathing":     { "p": 0.05, "basis": "assumed", "note": "kept low: respiratory involvement would reclassify the case as anaphylaxis under both NIAID/FAAN and WAO criteria" },
+          "throat_tightness":      { "p": 0.08, "basis": "assumed" },
+          "wheezing":              { "p": 0.02, "basis": "assumed" },
+          "cough":                 { "p": 0.08, "basis": "assumed" },
+          "stridor":               { "p": 0.00, "basis": "assumed" },
+          "dizziness":             { "p": 0.05, "basis": "assumed" },
+          "collapse":              { "p": 0.00, "basis": "assumed" },
+          "loss_of_consciousness": { "p": 0.00, "basis": "assumed" }
+        },
+        "context": { "known_exposure": 0.75, "rapid_onset": 0.70, "trigger_food": 0.60, "trigger_venom": 0.05, "trigger_drug": 0.15 }
+      }
+    },
+    "age_distribution": {
+      "child": 0.25,
+      "elderly": 0.15,
+      "adult": 0.60,
+      "_note": "assumed. No source reports the age distribution of anaphylaxis mimics presenting to an app."
+    }
+  },
+
+  "class_balance": {
+    "positive_fraction": 0.30,
+    "source": "campbell2012 / loprinzibrauer2016",
+    "note": "Anaphylaxis prevalence among emergency-department patients evaluated for possible allergic reaction was 28.5% (Campbell 2012, 61/214) and 35% (Loprinzi Brauer 2016, 61/174). We generate at 30%. The true prevalence among people who open a bystander app is unknown and probably lower, which would lower precision in the field. Stated as a limitation."
+  },
+
+  "assumptions": [
+    "The negative class is the weak point. No published study reports this symptom list across anaphylaxis and its mimics, so the seven mimic profiles combine sourced values with stated assumptions, and the mixture weights over those seven conditions have no source at all.",
+    "Every value with basis 'assumed' is a modelling choice by us, not a literature finding. evaluate.py perturbs all of them together to show how much the fitted model actually depends on them.",
+    "European Anaphylaxis Registry rates are conditioned on NIAID/FAAN positivity and on tertiary-centre referral, which oversamples severe reactions. Where a choice existed we preferred the Canadian emergency-department registry.",
+    "Adult trigger distribution is European (venom 50%) and will not match a US bystander population, where food is more common. The sensitivity analysis includes a US-weighted alternative.",
+    "Symptoms are generated as conditionally independent within an involved organ system. Real within-system correlations (for example stridor almost always accompanying dyspnoea) are only partially captured.",
+    "The final arbiter is not any of this: it is the held-out set of 44 real published cases, which the model never sees during fitting."
+  ],
+
+  "sources": {
+    "khalaf2025":       "Khalaf R, et al. Int Arch Allergy Immunol 2025;186(5):454-464. https://pmc.ncbi.nlm.nih.gov/articles/PMC12048103/",
+    "aurich2019":       "Aurich S, et al. Front Immunol 2019;10:750. https://www.frontiersin.org/articles/10.3389/fimmu.2019.00750/full",
+    "worm2012":         "Worm M, et al. Allergy 2012;67(5):691-698. https://pubmed.ncbi.nlm.nih.gov/22335765/",
+    "worm2014_allergy": "Worm M, et al. Allergy 2014;69(10):1397-1404. https://pubmed.ncbi.nlm.nih.gov/24989080/",
+    "worm2025":         "Worm M, et al. Allergol Select 2025;9:21-27. https://pmc.ncbi.nlm.nih.gov/articles/PMC11915352/",
+    "grabenhenrich2016":"Grabenhenrich LB, et al. JACI 2016;137(4):1128-1137. https://pubmed.ncbi.nlm.nih.gov/26806049/",
+    "francuzik2019":    "Francuzik W, et al. Front Immunol 2019;10:2482. https://pmc.ncbi.nlm.nih.gov/articles/PMC6842952/",
+    "francuzik2021":    "Francuzik W, et al. JACI 2021;147(2):653-662. https://pubmed.ncbi.nlm.nih.gov/32619558/",
+    "hanschmann2023":   "Hanschmann T, et al. Allergy 2023;78(6):1615-1627. https://pubmed.ncbi.nlm.nih.gov/36645170/",
+    "pyrpyris2022":     "Pyrpyris N, et al. J Pers Med 2022;12(10):1614. https://www.mdpi.com/2075-4426/12/10/1614",
+    "aytekin2024":      "Aytekin Guvenir F, et al. World Allergy Organ J 2024;17(11):100982. https://pmc.ncbi.nlm.nih.gov/articles/PMC11541769/",
+    "kulthanan2008":    "Kulthanan K, et al. Asian Pac J Allergy Immunol 2008;26(1):1-9. https://www.apjai-journal.org/wp-content/uploads/2017/12/1AcuteUrticariaVol26No1March2008P1.pdf",
+    "babaei2025":       "Babaei M, et al. Eur Heart J Open 2025;5(3):oeaf061. https://pmc.ncbi.nlm.nih.gov/articles/PMC12152479/",
+    "tunnell2024":      "Tunnell NC, et al. Front Psychiatry 2024;15:1296569. https://pmc.ncbi.nlm.nih.gov/articles/PMC11109415/",
+    "sampson2006":      "Sampson HA, et al. JACI 2006;117(2):391-397. https://pubmed.ncbi.nlm.nih.gov/16461139/",
+    "campbell2012":     "Campbell RL, et al. JACI 2012;129(3):748-752. https://pubmed.ncbi.nlm.nih.gov/22051698/",
+    "loprinzibrauer2016":"Loprinzi Brauer CE, et al. JACI Pract 2016;4(6):1220-1226. https://pubmed.ncbi.nlm.nih.gov/27406968/",
+    "cardona2020":      "Cardona V, et al. World Allergy Organ J 2020;13(10):100472. https://pmc.ncbi.nlm.nih.gov/articles/PMC7607509/"
+  }
+}
