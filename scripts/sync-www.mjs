@@ -27,6 +27,10 @@ const EXCLUDE = new Set([
   // Server-side only: SQL migrations and Edge Function source. Never belongs in
   // the app bundle or on the public Pages site.
   'supabase',
+  // Model training pipeline: evidence tables, fitting code, validation data.
+  // It produces js/model.js, but nothing in it is a runtime asset, and shipping
+  // it would add megabytes to the bundle and to the public Pages site.
+  'train',
   'capacitor.config.json',
 ]);
 
