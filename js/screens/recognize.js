@@ -34,6 +34,10 @@ let facingMode = 'environment'; // 'environment' (rear, default) or 'user' (fron
 let faceMesh = null;
 let rafId = null;
 let badgeTimer = null;
+let hudEl = null, hudRowsEl = null, hudFillEl = null, hudMetaEl = null;
+// Frame index of the most recent successful face detection, so the HUD can say
+// "searching" the moment tracking is actually lost rather than a second later.
+let lastSeenAt = 0;
 let revealTimer = null;
 let running = false;
 let lastFaceBox = null;
@@ -99,7 +103,14 @@ function build() {
 
       <div class="recognize__sheet" id="rec-sheet" hidden></div>
 
-      <p class="recognize__honesty" id="rec-honesty">Prototype decision support. Not a medical device. In an emergency, call 911.</p>
+      <div class="recognize__bottom">
+        <div class="scanhud" id="rec-hud" hidden>
+          <div class="scanhud__rows" id="hud-rows"></div>
+          <div class="scanhud__track"><div class="scanhud__fill" id="hud-fill"></div></div>
+          <div class="scanhud__meta" id="hud-meta"></div>
+        </div>
+        <p class="recognize__honesty" id="rec-honesty">Prototype decision support. Not a medical device. In an emergency, call 911.</p>
+      </div>
 
       <div class="perm-dark" id="rec-perm" hidden>
         <div class="pre-prompt__icon">${icons.camera()}</div>
@@ -114,6 +125,10 @@ function build() {
   canvas = root.querySelector('#rec-canvas');
   ctx = canvas.getContext('2d');
   badgesEl = root.querySelector('#rec-badges');
+  hudEl = root.querySelector('#rec-hud');
+  hudRowsEl = root.querySelector('#hud-rows');
+  hudFillEl = root.querySelector('#hud-fill');
+  hudMetaEl = root.querySelector('#hud-meta');
   sheetEl = root.querySelector('#rec-sheet');
   permEl = root.querySelector('#rec-perm');
   toolbarEl = root.querySelector('#rec-toolbar');
@@ -168,7 +183,7 @@ async function startCamera() {
   video.srcObject = stream;
   await video.play().catch(() => {});
   permEl.hidden = true;
-  flipEl.hidden = false;
+  updateFlipAvailability();
   updateMirror();
   sizeCanvas();
   window.addEventListener('resize', sizeCanvas);
@@ -188,55 +203,132 @@ async function startCamera() {
   revealTimer = setTimeout(reveal, 6000);
 }
 
-// Swap between rear (default) and front camera. Keeps the already-loaded
-// FaceMesh instance and detection loop running — only the video track
-// changes — but resets the per-scan vote counters, since a new camera view
-// is a fresh read and shouldn't be blended with the old one.
-async function flipCamera() {
-  if (!running || flipEl.hasAttribute('aria-disabled')) return;
-  flipEl.setAttribute('aria-disabled', 'true');
-  const nextFacing = facingMode === 'environment' ? 'user' : 'environment';
+// Swap between rear (default) and front camera.
+//
+// THIS USED TO KILL THE CAMERA. The old version asked for the new facing mode
+// while the old track was still live, and released the old track in a `finally`
+// that ran on the failure path too. On iOS that is the normal path, not the
+// edge case: WKWebView will not hand out a second camera while the first is
+// open, so the request threw, `finally` stopped the only working stream, and
+// the app was left with `running === true`, a dead <video>, and a detection
+// loop feeding stale pixels to MediaPipe. On screen that reads as the whole
+// thing freezing, which is exactly what it was.
+//
+// The order below is the fix: release first, then ask. That makes the request
+// likely to succeed, and it makes failure recoverable, because the only state
+// we are ever in is "no camera yet" rather than "camera destroyed".
+function getCamera(facing) {
+  // `ideal` rather than `exact`: on a device with one camera, `exact` rejects
+  // outright, while `ideal` returns what there is.
+  return navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: facing } },
+    audio: false,
+  });
+}
 
-  const oldStream = stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: nextFacing },
-      audio: false,
-    });
-    facingMode = nextFacing;
-  } catch (err) {
-    // No camera on that side (or blocked) — keep the one we already had.
-    flipEl.removeAttribute('aria-disabled');
-    return;
-  } finally {
-    if (oldStream) oldStream.getTracks().forEach((t) => t.stop());
-  }
+function stopTracks(s) {
+  if (!s) return;
+  try { s.getTracks().forEach((t) => t.stop()); } catch (_) {}
+}
 
-  video.srcObject = stream;
-  await video.play().catch(() => {});
-  updateMirror();
-
-  // Fresh camera view — reset the scan so old-camera votes don't mix in.
+// Reset the per-scan evidence. A different camera view is a fresh read and must
+// not be blended with votes accumulated from the previous one.
+function resetScanState() {
   seenFrames = 0;
   lastFaceBox = null;
+  lastSeenAt = 0;
   faceVision = createFaceVision();
   readyFrames = swellVotes = flushVotes = 0;
   reactionSum = reactionN = cnnFrame = hivesSum = 0;
   lastSkinTop = null; lastSkinProb = 0;
+  smoothPts = null;
+}
 
-  // If a result had already been revealed, don't leave a stale read on
-  // screen for the new camera view — go back to scanning honestly.
+// Both cameras are gone. Say so and route to the checklist rather than sitting
+// on a frozen last frame that still looks like a scan in progress.
+function cameraLost() {
+  running = false;
+  if (rafId) cancelAnimationFrame(rafId), (rafId = null);
+  if (badgeTimer) clearInterval(badgeTimer), (badgeTimer = null);
+  clearTimeout(revealTimer);
+  if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (hudEl) hudEl.hidden = true;
+  flipEl.hidden = true;
+  permEl.hidden = false;
+  permEl.querySelector('.body').textContent =
+    'Lost access to the camera while switching. You can try again, or use the manual checklist.';
+  const allowBtn = root.querySelector('#rec-allow');
+  allowBtn.textContent = 'Try camera again';
+  allowBtn.removeAttribute('aria-disabled');
+}
+
+let flipping = false;
+
+async function flipCamera() {
+  if (!running || flipping) return;
+  flipping = true;
+  flipEl.disabled = true;
+  flipEl.setAttribute('aria-disabled', 'true');
+
+  const previous = facingMode;
+  const next = previous === 'environment' ? 'user' : 'environment';
+
+  // Release BEFORE asking. See the note above.
+  stopTracks(stream);
+  stream = null;
+  video.srcObject = null;
+
+  let nextStream = null;
+  try {
+    nextStream = await getCamera(next);
+    facingMode = next;
+  } catch (_) {
+    // No camera on that side, or the device refused. Put the original back.
+    try {
+      nextStream = await getCamera(previous);
+      facingMode = previous;
+    } catch (_) {
+      cameraLost();
+      flipping = false;
+      return;
+    }
+  }
+
+  stream = nextStream;
+  video.srcObject = stream;
+  await video.play().catch(() => {});
+  updateMirror();
+  sizeCanvas();
+
+  resetScanState();
+
+  // If a result was already on screen, don't leave a stale read over a new
+  // camera view — go back to scanning honestly.
   if (state.recognize.revealed) {
     state.recognize.result = null;
     state.recognize.revealed = false;
     sheetEl.hidden = true;
     sheetEl.innerHTML = '';
-    startBadgeCycle();
   }
+  startBadgeCycle();
   clearTimeout(revealTimer);
   revealTimer = setTimeout(reveal, 6000);
 
+  flipEl.disabled = false;
   flipEl.removeAttribute('aria-disabled');
+  flipping = false;
+}
+
+// Only offer the control if there is somewhere to flip to. Labels and device
+// ids are only populated after permission is granted, so this runs post-start.
+async function updateFlipAvailability() {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cameras = devices.filter((d) => d.kind === 'videoinput');
+    flipEl.hidden = cameras.length < 2;
+  } catch (_) {
+    flipEl.hidden = false; // can't tell; leave it available
+  }
 }
 
 function sizeCanvas() {
@@ -275,9 +367,14 @@ async function setupFaceMesh() {
 // Feed frames to MediaPipe on a loop.
 async function pump() {
   if (!running || !faceMesh) return;
-  try {
-    await faceMesh.send({ image: video });
-  } catch (_) { /* transient */ }
+  // Never hand MediaPipe a video with no frames in it. During a camera swap the
+  // element briefly has no source, and sending it stale or empty pixels is what
+  // made a failed flip look like a hang instead of a retry.
+  if (video.readyState >= 2 && video.videoWidth > 0) {
+    try {
+      await faceMesh.send({ image: video });
+    } catch (_) { /* transient */ }
+  }
   rafId = requestAnimationFrame(pump);
 }
 
@@ -287,13 +384,13 @@ function onResults(results) {
   const faces = results.multiFaceLandmarks;
   if (faces && faces.length) {
     seenFrames += 1;
+    lastSeenAt = performance.now();
     const landmarks = faces[0];
     const reading = analyzeFrame(landmarks);
     const pts = smoothMapped(mapToCanvas(landmarks));
     const box = featureBox(pts, FACE_OVAL, 0.04);
     lastFaceBox = box;
     drawFaceOverlay(pts, box, reading);
-    positionBadges(box);
     // Reveal once we have a steady scan window AND the baseline has settled.
     if (readyFrames >= SCAN_FRAMES) reveal();
   } else {
@@ -355,23 +452,17 @@ function tracePath(pts, indices) {
 }
 
 function drawFaceOverlay(pts, box, reading) {
-  // Face: corner brackets on the true face-oval box.
-  drawBrackets(box);
-
-  // Scanning sweep while we're still accumulating evidence.
-  if (!state.recognize.revealed && readyFrames < SCAN_FRAMES) {
-    const t = (performance.now() % 2200) / 2200;
-    const y = box.y + box.h * (t < 0.5 ? t * 2 : 2 - t * 2);
-    const grad = ctx.createLinearGradient(box.x, 0, box.x + box.w, 0);
-    grad.addColorStop(0, 'rgba(255,255,255,0)');
-    grad.addColorStop(0.5, 'rgba(255,255,255,0.55)');
-    grad.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.strokeStyle = grad;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(box.x + 6, y);
-    ctx.lineTo(box.x + box.w - 6, y);
-    ctx.stroke();
+  // Two different states, two different shapes, so the frame itself tells you
+  // whether the app has found a face. Corner brackets mean searching (see
+  // drawStaticViewfinder). A continuous ring means locked on and analysing, and
+  // how far around it has travelled is how much of the read is done.
+  //
+  // Drawing both at once, which is what this did first, just looked busy: two
+  // white outlines around the same box carrying no distinct meaning.
+  if (state.recognize.revealed) {
+    drawBrackets(box);
+  } else {
+    drawScanProgress(box);
   }
 
   ctx.lineJoin = 'round';
@@ -454,6 +545,54 @@ function cheekCrop(landmarks) {
   return cropCanvas;
 }
 
+// Trace a rounded rectangle. Written out rather than using ctx.roundRect so the
+// overlay renders identically on older WKWebView builds.
+function roundRectPath(x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+}
+
+// Progress traced around the face box itself, as a fraction of the frames the
+// read actually needs. The old sweep line was a sine wave on the clock: it moved
+// at the same rate whether analysis was progressing, stalled, or had never
+// started. This cannot move unless readyFrames moves.
+function drawScanProgress(box) {
+  const pad = 10;
+  const x = box.x - pad, y = box.y - pad;
+  const w = box.w + pad * 2, h = box.h + pad * 2;
+  const r = Math.min(w, h) * 0.14;
+  const perimeter = 2 * (w + h) - 8 * r + 2 * Math.PI * r;
+  const p = Math.max(0, Math.min(1, readyFrames / SCAN_FRAMES));
+
+  // Unfilled track.
+  roundRectPath(x, y, w, h, r);
+  ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([]);
+  ctx.stroke();
+
+  if (p <= 0) return;
+
+  // Filled portion. Drawn as a single dash of the covered length, offset to
+  // start at the top-left corner, so the stroke grows around the box.
+  roundRectPath(x, y, w, h, r);
+  ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.setLineDash([perimeter * p, perimeter]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
 function drawBrackets(box) {
   const { x, y, w, h } = box;
   const len = Math.min(w, h) * 0.28;
@@ -480,47 +619,96 @@ function drawStaticViewfinder() {
   drawBrackets({ x: (w - bw) / 2, y: (h - bh) / 2 - h * 0.05, w: bw, h: bh });
 }
 
-// Plain-language checks cycle (no numbers, ever). The list is built from the
-// engines that ACTUALLY loaded, so the badge never advertises a check that
-// isn't running.
+// ---------------------------------------------------------------------------
+// Scan HUD.
 //
-// "Watching for changes" is deliberate and is the literal truth about the
-// landmark check: the baseline it compares against is the first ~12 frames of
-// THIS scan (js/faceVision.js), i.e. of the same face. It can therefore only
-// see swelling that gets worse while the camera is watching — never swelling
-// that was already there. The old "Checking: face & lips" claimed the latter.
-function activeChecks() {
-  const checks = [];
-  if (faceMeshReady) checks.push('Watching for changes: lips & eyes');
-  if (hivesReady) checks.push('Checking: skin');
-  return checks;
+// This used to be a single badge cycling through check names on a 1.8-second
+// timer, which ran at the same speed whether the models were working, idle, or
+// had failed to load. It looked like a progress animation and was one, in the
+// worst sense: it conveyed nothing. A reviewer calling the scan fake was
+// reading it correctly.
+//
+// Everything below is derived from state that the vision loop actually
+// produces: whether MediaPipe returned landmarks on the last frame, how many
+// frames have cleared the baseline warm-up, and how many crops the CNN has
+// actually classified. When a model fails to load, its row says so and stays
+// there instead of quietly dropping out of a rotation.
+//
+// It reports PROGRESS, never FINDINGS. Nothing here hints at the verdict: no
+// probability, no cue names, no colour that reads as a result. Live-scoring a
+// person's face at them while the scan is still running would be both alarming
+// and, at frame 3 of 30, wrong.
+
+function startBadgeCycle() {
+  clearInterval(badgeTimer);
+  // Repaint on a slow tick as well as per frame, so the row still updates while
+  // no face is detected and onResults is producing nothing to render.
+  badgeTimer = setInterval(renderBadge, 250);
+  renderBadge();
 }
 
-let checkIndex = 0;
-function startBadgeCycle() {
-  checkIndex = 0;
-  renderBadge();
-  clearInterval(badgeTimer);
-  badgeTimer = setInterval(() => {
-    checkIndex += 1;
-    renderBadge();
-  }, 1800);
+function hudRow(label, state_, detail) {
+  return `
+    <div class="scanhud__row" data-state="${state_}">
+      <span class="scanhud__dot"></span>
+      <span class="scanhud__label">${label}</span>
+      <span class="scanhud__value">${detail}</span>
+    </div>`;
 }
+
 function renderBadge() {
-  if (!badgesEl || state.recognize.revealed) return;
-  const checks = activeChecks();
-  if (!checks.length) {
-    badgesEl.innerHTML = (faceMeshSettled && hivesSettled)
-      ? `<span class="badge-glass">Visual check unavailable</span>`
-      : `<span class="badge-glass">Starting the visual check…</span>`;
-    return;
+  if (!hudEl || !badgesEl) return;
+  if (state.recognize.revealed) { hudEl.hidden = true; return; }
+  badgesEl.innerHTML = '';
+
+  const tracking = performance.now() - lastSeenAt < 400;
+  const rows = [];
+
+  // Face tracking row.
+  if (!faceMeshSettled) {
+    rows.push(hudRow('Face tracking', 'loading', 'starting'));
+  } else if (!faceMeshReady) {
+    rows.push(hudRow('Face tracking', 'failed', 'unavailable'));
+  } else if (tracking) {
+    rows.push(hudRow('Lips &amp; eyes', 'active', 'tracking'));
+  } else {
+    rows.push(hudRow('Lips &amp; eyes', 'waiting', 'looking for a face'));
   }
-  badgesEl.innerHTML = `<span class="badge-glass">${checks[checkIndex % checks.length]}</span>`;
-}
-function positionBadges(box) {
-  // Nudge the badge stack toward the detected face region.
-  const top = Math.max(80, box.y - 44);
-  badgesEl.style.top = `${top}px`;
+
+  // Skin classifier row. reactionN is the number of cheek crops actually put
+  // through the network, so it cannot move unless the model really ran.
+  if (!hivesSettled) {
+    rows.push(hudRow('Skin analysis', 'loading', 'loading model'));
+  } else if (!hivesReady) {
+    rows.push(hudRow('Skin analysis', 'failed', 'unavailable'));
+  } else if (reactionN > 0) {
+    rows.push(hudRow('Skin analysis', 'active',
+      `${reactionN} sample${reactionN === 1 ? '' : 's'}`));
+  } else {
+    rows.push(hudRow('Skin analysis', 'waiting', 'ready'));
+  }
+
+  hudRowsEl.innerHTML = rows.join('');
+
+  // Progress is frames that cleared the baseline warm-up, out of the number the
+  // read needs. It is the real denominator the reveal fires on, not a clock.
+  const pct = Math.max(0, Math.min(1, readyFrames / SCAN_FRAMES));
+  hudFillEl.style.width = `${(pct * 100).toFixed(1)}%`;
+  hudEl.classList.toggle('scanhud--stalled', faceMeshReady && !tracking && readyFrames > 0);
+
+  if (faceMeshSettled && hivesSettled && !faceMeshReady && !hivesReady) {
+    hudMetaEl.textContent = 'Visual check unavailable \u2014 use the symptom checklist';
+  } else if (!faceMeshReady && !hivesReady) {
+    hudMetaEl.textContent = 'Starting the visual check\u2026';
+  } else if (!tracking && readyFrames > 0) {
+    hudMetaEl.textContent = `Paused at ${readyFrames} of ${SCAN_FRAMES} frames \u2014 hold the face in view`;
+  } else if (readyFrames > 0) {
+    hudMetaEl.textContent = `Analysing frame ${readyFrames} of ${SCAN_FRAMES}`;
+  } else {
+    hudMetaEl.textContent = 'Point the camera at the affected face';
+  }
+
+  hudEl.hidden = false;
 }
 
 // Urgency → pill styling for the reveal sheet header.

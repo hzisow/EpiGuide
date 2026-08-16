@@ -287,10 +287,8 @@
 
 /* Persistent honesty line over the viewfinder (hidden behind the reveal sheet). */
 .recognize__honesty {
-  position: absolute;
-  left: var(--space-5); right: var(--space-5);
-  bottom: calc(var(--tabbar-h) + var(--space-2));
-  z-index: 4;
+  margin: 0;
+  padding: 0 var(--space-4);
   text-align: center;
   font-size: 12px; line-height: 1.4;
   color: rgba(255,255,255,0.75);
@@ -1118,3 +1116,113 @@
 .triage__act--urgent small { color: rgba(255,255,255,0.82); }
 .triage__act--call { border-color: rgba(224,49,49,0.35); color: var(--color-red-dark); }
 .triage__act--call small { color: var(--color-gray-text); }
+
+
+/* ============================================================
+   Scan HUD (Recognize)
+
+   Instrumentation, not decoration. Every row is bound to state the
+   vision loop actually produces, so if a model fails to load its row
+   says so and stays there. Reports progress only — never findings.
+   ============================================================ */
+/* HUD and disclaimer share one bottom-anchored column. They were both absolutely
+   positioned at first, which meant the gap between them was a magic number that
+   had to be re-guessed for every screen width, and got it wrong by 4px at 390.
+   Stacking them makes overlap structurally impossible: the disclaimer is not
+   decoration and must never end up underneath the panel. */
+.recognize__bottom {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: calc(var(--tabbar-h) + var(--space-2));
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 var(--space-3);
+  pointer-events: none;
+}
+
+.scanhud {
+  padding: 12px 14px;
+  border-radius: var(--radius-lg, 16px);
+  background: rgba(12, 14, 18, 0.62);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  pointer-events: none;
+}
+.scanhud[hidden] { display: none; }
+
+.scanhud__rows { display: flex; flex-direction: column; gap: 6px; }
+
+.scanhud__row {
+  display: grid;
+  grid-template-columns: 8px 1fr auto;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+.scanhud__label { color: rgba(255, 255, 255, 0.92); font-weight: 550; }
+.scanhud__value {
+  color: rgba(255, 255, 255, 0.62);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.scanhud__dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.28);
+}
+/* Calm and clinical: white for working, amber only for a genuine failure.
+   No green ticks, and nothing red — red on this screen must mean a finding. */
+.scanhud__row[data-state="active"]  .scanhud__dot {
+  background: #fff;
+  animation: scanhud-pulse 1.6s var(--ease-out, ease-out) infinite;
+}
+.scanhud__row[data-state="loading"] .scanhud__dot {
+  background: rgba(255, 255, 255, 0.55);
+  animation: scanhud-pulse 1s var(--ease-out, ease-out) infinite;
+}
+.scanhud__row[data-state="waiting"] .scanhud__dot { background: rgba(255, 255, 255, 0.32); }
+.scanhud__row[data-state="failed"]  .scanhud__dot { background: #ffa8a8; }
+.scanhud__row[data-state="failed"]  .scanhud__value { color: #ffa8a8; }
+
+@keyframes scanhud-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+.scanhud__track {
+  height: 3px;
+  margin-top: 11px;
+  border-radius: var(--radius-pill, 99px);
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+.scanhud__fill {
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: #fff;
+  /* Eased, but short: the bar must visibly stop when analysis stops. A long
+     transition would keep it gliding after tracking is lost, which is the
+     kind of detail that makes a real process look simulated. */
+  transition: width 180ms linear;
+}
+.scanhud--stalled .scanhud__fill { background: rgba(255, 255, 255, 0.45); }
+
+.scanhud__meta {
+  margin-top: 7px;
+  font-size: 11.5px;
+  letter-spacing: 0.01em;
+  color: rgba(255, 255, 255, 0.58);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scanhud__dot { animation: none !important; }
+  .scanhud__fill { transition: none; }
+}
