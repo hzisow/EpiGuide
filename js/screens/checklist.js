@@ -1,11 +1,12 @@
 // Screen 5 — Checklist. Manual symptom fallback off Recognize. The result card is
-// now driven by the registry-trained model (js/model.js): checked items are mapped
+// now driven by the model in js/model.js (fitted on registry-derived synthetic
+// cases, validated on real published cases): checked items are mapped
 // to model feature keys, scored with the safety override, and shown as a CATEGORY
 // + urgency. The raw probability + weight breakdown appear ONLY behind ?debug.
 
 import { state, navigate, logIncidentEventOnce } from '../app.js';
 import { icons } from '../icons.js';
-import { checklistCategories, checklistToModelState } from '../data/checklistItems.js';
+import { checklistCategories, checklistToModelState, ageBands } from '../data/checklistItems.js';
 import { scoreWithSafetyOverride } from '../model.js';
 import { isDebugMode, URGENCY_COPY, debugPanelHTML } from '../modelUi.js';
 
@@ -33,7 +34,19 @@ function build() {
     </div>`;
 
   const body = root.querySelector('#cl-body');
-  body.innerHTML = checklistCategories.map((cat) => `
+  const ageHTML = `
+    <div class="checklist__group" data-cat="age">
+      <div class="eyebrow checklist__group-label">Who has symptoms?</div>
+      <div class="segmented segmented--light" role="tablist" aria-label="Age group" id="cl-age">
+        ${ageBands.map((b) => `
+          <button type="button" role="tab" data-age="${b.id}"
+                  aria-selected="${b.id === state.checklist.ageBand}">
+            ${b.label}<span class="segmented__sub">${b.sub}</span>
+          </button>`).join('')}
+      </div>
+    </div>`;
+
+  body.innerHTML = ageHTML + checklistCategories.map((cat) => `
     <div class="checklist__group" data-cat="${cat.id}">
       <div class="eyebrow checklist__group-label">${cat.label}</div>
       ${cat.items.map((item) => `
@@ -43,6 +56,16 @@ function build() {
           <span class="check-label">${item.label}</span>
         </label>`).join('')}
     </div>`).join('');
+
+  body.addEventListener('click', (e) => {
+    const btn = e.target.closest('#cl-age button[data-age]');
+    if (!btn) return;
+    state.checklist.ageBand = btn.dataset.age;
+    root.querySelectorAll('#cl-age button[data-age]').forEach((b) => {
+      b.setAttribute('aria-selected', String(b.dataset.age === state.checklist.ageBand));
+    });
+    updateResult();
+  });
 
   body.addEventListener('change', (e) => {
     const cb = e.target.closest('input[type="checkbox"]');
@@ -62,10 +85,13 @@ function syncFromState() {
   root.querySelectorAll('#cl-body input[type="checkbox"]').forEach((cb) => {
     cb.checked = checked.has(cb.dataset.item);
   });
+  root.querySelectorAll('#cl-age button[data-age]').forEach((b) => {
+    b.setAttribute('aria-selected', String(b.dataset.age === state.checklist.ageBand));
+  });
 }
 
 function scoreChecklist() {
-  const modelState = checklistToModelState(state.checklist.checkedItemIds);
+  const modelState = checklistToModelState(state.checklist.checkedItemIds, state.checklist.ageBand);
   return scoreWithSafetyOverride(modelState);
 }
 
