@@ -181,7 +181,8 @@ function friendly(e) {
 async function renderSignedIn(user) {
   setBody(`<div class="optin__note">Loading your profile…</div>`);
   let profile = null;
-  try { const n = await net(); profile = await n.getProfile(); } catch (_) {}
+  let netMod = null;
+  try { netMod = await net(); profile = await netMod.getProfile(); } catch (_) {}
 
   const available = !!profile?.is_available;
   setBody(`
@@ -207,6 +208,15 @@ async function renderSignedIn(user) {
     <p class="optin__note">${isNative()
       ? `Once you allow notifications, we'll remind you 30 days before a pen expires and again on the day. <strong>Closed-app emergency alerts aren't active on iOS yet</strong> — you'll be alerted while EpiGuide is open. Turning off availability stops alerts.`
       : `Your pens' expiry dates are tracked here, but this browser can't schedule a reminder — check back yourself. Emergency alerts reach you even with the app closed once you allow notifications; turning off availability stops them.`}</p>`);
+
+  // Resubscribe whenever this screen mounts for a responder who is ALREADY
+  // available. startListening() used to be reachable only from goAvailable(),
+  // so it ran only in the session where the toggle was flipped. Availability
+  // persists server-side, so after a reload this screen rendered "Listening for
+  // nearby alerts" while nothing was subscribed: a claim about the state rather
+  // than the state, and a real alert to an in-range responder never arrived.
+  // startListening() unsubscribes first, so this cannot double-subscribe.
+  if (available && netMod) startListening(netMod);
 
   // Mount the EpiPen inventory (scan a pen, track expirations). Saving a pen
   // also updates the availability profile above (what you carry).
