@@ -113,11 +113,15 @@ no browser chrome (clean for Apple Frames screenshots later).
 - **Guide step copy needs physician sign-off** (Dr. Cohen, Dr. Laidlaw) before
   shipping anywhere real. If the 6 steps in `js/data/guideSteps.js` are ever
   changed, flag for re-review.
-- **Recognize model.** This build ships the honest MediaPipe Face Mesh fallback.
-  Henry's registry-trained logistic-regression classifier lives in a separate
-  chat session — recover and re-integrate it into `js/screens/recognize.js` to
-  restore full fidelity. The UI is written to be honest about what it detects
-  until then.
+- **Recognize model.** Both models are now built by a committed, reproducible
+  pipeline in `train/`, and `js/model.js` is generated from it — do not hand-edit
+  that file, run `cd train && make all`. Read `train/METHODS.md` before quoting
+  any number about either model anywhere: it states what the models were fitted
+  on, what was validated against real patients, and what is still assumption.
+  Two figures worth knowing before a pitch: the symptom system reaches
+  sensitivity 1.00 / specificity 0.41 on 44 real published cases, and the
+  fitted model alone is WORSE than the published clinical criteria, which is why
+  it is not allowed to decide on its own.
 
 ## Notes
 
