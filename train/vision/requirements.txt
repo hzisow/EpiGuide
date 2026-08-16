@@ -1,0 +1,10 @@
+# Vision model. TensorFlow genuinely belongs here: MobileNetV2 is ~2.3M
+# parameters and a real convolutional network, unlike the 23-number symptom
+# model in ../src.
+tensorflow>=2.15,<2.16
+tensorflowjs>=4.17
+pandas>=2.0
+numpy>=1.24
+scikit-learn>=1.3
+pillow>=10.0
+requests>=2.31

@@ -1,0 +1,7 @@
+{
+  "name": "epiguide-vision-audit",
+  "private": true,
+  "description": "Audits the shipped TF.js skin model against real SCIN images",
+  "scripts": { "audit": "node audit_shipped_model.js" },
+  "dependencies": { "@tensorflow/tfjs-node": "4.17.0" }
+}
