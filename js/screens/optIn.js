@@ -53,15 +53,21 @@ function setBody(html) { root.querySelector('#optin-body').innerHTML = html; }
 async function refresh() {
   setBody(`<div class="optin__note">Loading…</div>`);
   let user = null;
+  let anonymous = false;
   try {
     const n = await net();
     user = await n.currentUser();
+    anonymous = n.isAnonymousUser(user);
   } catch (e) {
     setBody(`<div class="card"><p class="body">Can't reach the network right now. Check your connection and reopen this tab.</p></div>`);
     return;
   }
   selfUserId = user?.id || null;
-  if (!user) return renderSignedOut();
+  // An anonymous session exists only because a bystander with no account raised
+  // an alert. That is an identity for one emergency, not an account, so this
+  // screen treats it as signed out: volunteering means being reachable later,
+  // across sessions and devices, which needs a real account.
+  if (!user || anonymous) return renderSignedOut();
   return renderSignedIn(user);
 }
 

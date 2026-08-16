@@ -204,6 +204,60 @@ export function onAuthChange(cb) {
   return () => data.subscription.unsubscribe();
 }
 
+/**
+ * Is this an anonymous (no-account) session? Supabase marks these with
+ * is_anonymous on the user record. Used so an anonymous bystander is never
+ * presented as "signed in" — they have an identity for the length of one
+ * emergency, not an account.
+ */
+export function isAnonymousUser(user) {
+  return Boolean(user && user.is_anonymous);
+}
+
+/**
+ * Get a session for someone raising an alert, signing them in anonymously if
+ * they do not have one.
+ *
+ * WHY: the premise of this app is that the person who can help is a stranger
+ * standing nearby, and a stranger by definition has no account. Requiring a
+ * sign-in before they can alert nearby volunteers contradicts the product, and
+ * asking someone to complete Google OAuth mid-emergency is not a real option.
+ *
+ * An alert CAN be inserted with no session at all (created_by = null, allowed by
+ * the anon RLS policy), and that stays the fallback. But that path is degraded
+ * in two ways that matter:
+ *
+ *   1. anon cannot invoke notify-responders, so no push goes out and only
+ *      responders with the app already open ever see the alert.
+ *   2. anon cannot UPDATE alerts, so the raiser can never stand their own alert
+ *      down, and a volunteer keeps running toward an emergency that is over.
+ *
+ * An anonymous session fixes both: it is the `authenticated` role, so the
+ * function invoke and the existing created_by = auth.uid() update policy both
+ * work, with no account, no email and no password.
+ *
+ * Requires Anonymous sign-ins to be enabled in the Supabase dashboard
+ * (Authentication > Sign In / Providers). If it is off, or the call fails for
+ * any other reason, this resolves to null and the caller falls back to the anon
+ * path rather than failing the alert. An auth problem must never stop an
+ * emergency alert from going out.
+ */
+export async function ensureSessionForAlert() {
+  try {
+    const existing = await currentUser();
+    if (existing) return existing;
+  } catch (_) { /* no session, try to create one below */ }
+
+  try {
+    const { data, error } = await supabase.auth.signInAnonymously();
+    if (error) throw error;
+    return data?.user || null;
+  } catch (e) {
+    console.warn('anonymous sign-in unavailable, falling back to the anon path:', e);
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Geolocation
 // ---------------------------------------------------------------------------
@@ -482,7 +536,12 @@ export async function enablePush() {
 // ---------------------------------------------------------------------------
 
 export async function raiseAlert({ lat, lng, note }) {
-  const user = await currentUser();
+  // A bystander with no account gets an anonymous session here, so their alert
+  // takes the full authenticated path: push actually fans out, and they can
+  // stand the alert down afterwards. Returns null if anonymous sign-in is
+  // disabled server-side, in which case everything below still works via the
+  // degraded anon path (created_by = null, no push fan-out, no stand-down).
+  const user = await ensureSessionForAlert();
   // Client-generate the id so a NOT-signed-in ("anon") bystander can raise an
   // alert without reading the row back — anon has no SELECT on alerts, so a
   // patient's exact location is never exposed to other anonymous clients.
@@ -529,7 +588,6 @@ export async function raiseAlert({ lat, lng, note }) {
  * error. Shipping the button anyway would look exactly like it worked.
  */
 export async function canResolveAlert(alert) {
-  if (true) return true; // HARNESS
   if (!alert || !alert.id || !alert.created_by) return false;
   try {
     const user = await currentUser();

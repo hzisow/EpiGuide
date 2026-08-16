@@ -43,13 +43,46 @@ config.js already has them.
 4. Phone A should buzz with a push (even with the app closed). Tapping it opens the Responder Alert screen with the real note and distance. Accept, and Phone A moves to the map view; Phone B's Dispatch shows the volunteer "On the way," then "Arrived."
 
 Notes:
-- For the demo, keep both phones signed in. If you want a true stranger (no account)
-  to be able to raise an alert, turn on Anonymous sign-ins in the Supabase dashboard
-  (Authentication > Sign In / Providers). The RLS is already written to allow it, so
-  it just starts working.
+- Phone B does not have to be signed in any more. See "Strangers with no account"
+  below.
 - The simulated 911 banner, ambulance, and ETA on Dispatch are still UI only. The
   volunteer alert is the one real network action on that screen, and it's labeled
   as separate.
+
+## Strangers with no account
+
+The person who can help is a stranger standing nearby, and a stranger has no
+account. So raising an alert never requires signing in.
+
+`raiseAlert()` calls `ensureSessionForAlert()` first. If there is no session it
+signs the device in **anonymously**: a real Supabase user with a uid, no email,
+no password, and nothing for the user to fill in. The alert then travels the
+normal authenticated path.
+
+That matters because the no-session fallback is genuinely degraded, and the RLS
+policies are what make it so:
+
+| | anonymous session | no session at all (`anon` role) |
+|---|---|---|
+| insert an alert | `alerts_insert`, `created_by = auth.uid()` | `alerts_insert_anon`, `created_by IS NULL` |
+| push fan-out via `notify-responders` | works | blocked, so only responders with the app already open ever see it |
+| stand the alert down | `alerts_update`, `created_by = auth.uid()` | no anon UPDATE policy exists, so it can never be ended |
+| read responses | only for alerts this user raised | any active alert's responses |
+
+So the fallback both fails to reach anyone by push and strands a volunteer
+running toward an emergency that is already over. The anonymous session fixes
+all of it, and is tighter on privacy too, since responses are scoped to the
+alert this device actually raised.
+
+**One-time dashboard step.** Anonymous sign-ins must be enabled in the Supabase
+dashboard under Authentication > Sign In / Providers. If it is off,
+`ensureSessionForAlert()` logs a warning, returns null, and the alert still goes
+out through the old `anon` path. An auth problem must never stop an emergency
+alert.
+
+The Volunteer screen treats an anonymous session as signed out. Volunteering
+means being reachable later, across sessions and devices, and that needs a real
+account. An anonymous identity lasts one emergency.
 
 ## One-time dashboard step: enable Google sign-in
 
